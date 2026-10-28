@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Zelo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F4F7F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0C1A1D" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<script>
+// Aplica o tema salvo antes do CSS, para a tela não piscar.
+try {
+  var t = localStorage.getItem("zelo-tema");
+  if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+} catch (e) {}
+</script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-casa" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></symbol>
+  <symbol id="i-lista" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="i-resumo" viewBox="0 0 24 24"><path d="M5 20V11M12 20V4M19 20v-6"/></symbol>
+  <symbol id="i-ajustes" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></symbol>
+  <symbol id="i-semnet" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 3-2M2 9a15 15 0 0 1 4-2.6M12 20h.01"/></symbol>
+  <symbol id="i-atencao" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-ok" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+  <symbol id="i-vazio" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="4"/><path d="M8 11h8M8 15h5"/></symbol>
+</svg>
+
+<div class="app">
+  <header class="topo">
+    <svg class="wordmark" viewBox="0 0 214 100" role="img" aria-label="Zelo">
+    <g fill="none" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" class="wordmark-traco">
+      <path d="M13 40 H52 L13 82 H52"/><path d="M72 61 H114 A21 21 0 1 0 105 77"/><path d="M140 14 V72 Q140 82 150 82"/><circle cx="190" cy="61" r="21"/>
+    </g>
+    <circle class="wordmark-ponto" cx="190" cy="61" r="6.5"/>
+  </svg>
+    <!-- Indicador da fila de envio: o conteúdo real vem com a fila (1.2.x); aqui só o lugar. -->
+    <span class="fila" id="fila"><svg class="ic" aria-hidden="true"><use href="#i-ok"/></svg><span id="fila-texto">Tudo enviado</span></span>
+  </header>
+
+  <div class="faixa faixa-info" id="faixa-semnet" role="status" hidden>
+    <svg class="ic" aria-hidden="true"><use href="#i-semnet"/></svg>
+    <div><strong>Sem internet por enquanto</strong>Pode continuar usando. O Zelo envia quando a conexão voltar.</div>
+  </div>
+  <div class="faixa faixa-erro" id="faixa-erro" role="alert" hidden>
+    <svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg>
+    <div><strong>Não consegui abrir esta tela</strong>Nada se perdeu. Tente de novo em instantes.<br><button class="btn-s" id="erro-de-novo" type="button">Tentar de novo</button></div>
+  </div>
+
+  <main class="tela-area" id="conteudo" tabindex="-1">
+    <section class="tela" data-tela="inicio" aria-labelledby="t-inicio">
+      <h1 id="t-inicio">Início</h1>
+      <div class="cartao"><svg class="ic ic-grande" aria-hidden="true"><use href="#i-casa"/></svg><p><strong id="saudacao">Olá</strong></p><p id="inicio-apoio">O resumo do mês chega em breve.</p></div>
+    </section>
+    <section class="tela" data-tela="lancamentos" aria-labelledby="t-lan" hidden>
+      <h1 id="t-lan">Lançamentos</h1>
+      <div class="cartao"><svg class="ic ic-grande" aria-hidden="true"><use href="#i-vazio"/></svg><p><strong>Nenhum lançamento por aqui ainda</strong></p><p>Quando você anotar o primeiro gasto ou a primeira entrada, ele aparece nesta lista.</p></div>
+    </section>
+    <section class="tela" data-tela="resumo" aria-labelledby="t-res" hidden>
+      <h1 id="t-res">Resumo</h1>
+      <div class="cartao"><svg class="ic ic-grande" aria-hidden="true"><use href="#i-resumo"/></svg><p><strong>Ainda não há o que somar</strong></p><p>Depois dos primeiros lançamentos, aqui aparece para onde foi o dinheiro do mês.</p></div>
+    </section>
+    <section class="tela" data-tela="ajustes" aria-labelledby="t-aju" hidden>
+      <h1 id="t-aju">Ajustes</h1>
+      <fieldset class="grupo">
+        <legend>Aparência</legend>
+        <label class="opcao"><input type="radio" name="tema" value="auto" checked>Automático</label>
+        <label class="opcao"><input type="radio" name="tema" value="light">Claro</label>
+        <label class="opcao"><input type="radio" name="tema" value="dark">Escuro</label>
+        <p class="apoio">Automático segue o tema do celular.</p>
+      </fieldset>
+    </section>
+  </main>
+
+  <nav class="nav" aria-label="Telas do Zelo">
+    <a href="#inicio" data-id="inicio" aria-current="page"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-casa"/></svg></span>Início</a>
+    <a href="#lancamentos" data-id="lancamentos"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-lista"/></svg></span>Lançamentos</a>
+    <a href="#resumo" data-id="resumo"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-resumo"/></svg></span>Resumo</a>
+    <a href="#ajustes" data-id="ajustes"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-ajustes"/></svg></span>Ajustes</a>
+  </nav>
+</div>
+<script src="js/rotas.js"></script>
+<script src="js/tema.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
