@@ -1,0 +1,209 @@
+/* Zelo · identidade final (direção A "Abraço"). Pronto para copiar para o styles.css do app.
+   Valores idênticos a prototipos/7-identidade/tokens.css (direção A). Padrão da skill pwa-padrao:
+   claro em :root; escuro automático por prefers-color-scheme; escolha manual por data-theme no <html>. */
+:root {
+  --bg: #F4F7F7;
+  --surface: #FFFFFF;
+  --fg: #12262B;
+  --muted: #4B6168;
+  --line: #DCE5E6;
+  --line-strong: #7A8F94;
+  --accent: #0E5A66;
+  --on-accent: #FFFFFF;
+  --accent-soft: #DDEEF0;
+  --spark: #E8604C;
+  --entrada: #136B3E;
+  --saida: #B3392B;
+  --alerta: #7A5200;
+  --alerta-bg: #FFF1D6;
+  --ai-bg: #E4F1F2;
+  --ai-fg: #12262B;
+  --user-bg: #0E5A66;
+  --user-fg: #FFFFFF;
+  --sh: 0 1px 2px rgba(18,38,43,.06), 0 8px 20px rgba(18,38,43,.08);
+  color-scheme: light;
+
+  /* tipografia: só fontes do sistema */
+  --font: system-ui, Roboto, "Segoe UI", sans-serif;
+  --t-xs: 12px; --t-s: 14px; --t-b: 16px; --t-l: 18px; --t-xl: 24px; --t-xx: 32px;
+  --w-texto: 400; --w-forte: 600; --w-numero: 700;
+
+  /* formas e espaços (grade de 4 px) */
+  --r-campo: 14px; --r-cartao: 20px; --r-botao: 16px; --r-balao: 20px; --r-balao-ponta: 6px;
+  --r-redondo: 28px; --r-pilula: 999px;
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-6: 24px; --sp-8: 32px;
+  --toque: 48px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0C1A1D;
+    --surface: #142428;
+    --fg: #E6F0F1;
+    --muted: #9DB3B7;
+    --line: #243A3F;
+    --line-strong: #5E7B81;
+    --accent: #5CC0CE;
+    --on-accent: #07262B;
+    --accent-soft: #1B3A40;
+    --spark: #FF8A75;
+    --entrada: #6CD39A;
+    --saida: #FF9C8C;
+    --alerta: #F2C25B;
+    --alerta-bg: #3A2D0F;
+    --ai-bg: #1B3237;
+    --ai-fg: #E6F0F1;
+    --user-bg: #5CC0CE;
+    --user-fg: #07262B;
+    --sh: 0 1px 0 rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0C1A1D;
+  --surface: #142428;
+  --fg: #E6F0F1;
+  --muted: #9DB3B7;
+  --line: #243A3F;
+  --line-strong: #5E7B81;
+  --accent: #5CC0CE;
+  --on-accent: #07262B;
+  --accent-soft: #1B3A40;
+  --spark: #FF8A75;
+  --entrada: #6CD39A;
+  --saida: #FF9C8C;
+  --alerta: #F2C25B;
+  --alerta-bg: #3A2D0F;
+  --ai-bg: #1B3237;
+  --ai-fg: #E6F0F1;
+  --user-bg: #5CC0CE;
+  --user-fg: #07262B;
+  --sh: 0 1px 0 rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+
+
+:root {
+  /* durações */
+  --dur-instante: 90ms;   /* toque, afundar do botão */
+  --dur-curta: 160ms;     /* saídas, cor, foco */
+  --dur-media: 260ms;     /* entradas, troca de aba */
+  --dur-longa: 420ms;     /* coração, item que pousa */
+  --dur-cena: 700ms;      /* saldo contando, abertura */
+
+  /* curvas */
+  --ease-padrao: cubic-bezier(.3, 0, .2, 1);     /* movimentos que ficam na tela */
+  --ease-entra: cubic-bezier(.05, .7, .1, 1);    /* chega rápido e assenta devagar */
+  --ease-sai: cubic-bezier(.3, 0, .8, .15);      /* sai acelerando */
+  --ease-suave: cubic-bezier(.45, .05, .25, 1);  /* vai e volta, laços lentos */
+  --ease-coracao: cubic-bezier(.34, 1.4, .64, 1);/* leve elástico: SÓ no coração e no selo */
+
+  /* distâncias e escalas (viram 0 / 1 no modo reduzido) */
+  --desloc-p: 8px;        /* cascata, pousar */
+  --desloc-m: 16px;       /* entrada de tela, cartões */
+  --desloc-g: 24px;       /* troca de aba */
+  --tremor: 6px;          /* erro */
+  --pulo-ponto: -4px;     /* pontinhos do "pensando" */
+  --escala-aperta: .97;   /* botão pressionado */
+  --escala-entra: .96;    /* balões e cartões que chegam */
+  --escala-some: .94;     /* cartão que encolhe */
+  --escala-bate: 1.2;     /* batida do coração */
+  --giro-fim: 360deg;     /* sincronização */
+  --giro-op: 1;
+  --bate-op: 1;           /* coração: piscada de opacidade (só no reduzido) */
+  --brilho-op: 1;         /* esqueleto: brilho que passa */
+  --laco: infinite;       /* laços (pensando, girar, brilho) */
+
+  /* cascata */
+  --cascata-passo: 40ms;  /* 30 a 50 ms por item; no máximo 6 itens */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instante: 60ms; --dur-curta: 120ms; --dur-media: 120ms; --dur-longa: 160ms; --dur-cena: 160ms;
+    --desloc-p: 0px; --desloc-m: 0px; --desloc-g: 0px; --tremor: 0px; --pulo-ponto: 0px;
+    --escala-aperta: 1; --escala-entra: 1; --escala-some: 1; --escala-bate: 1;
+    --giro-fim: 0deg; --giro-op: .35; --bate-op: .45; --brilho-op: 0; --cascata-passo: 0ms;
+  }
+}
+:root[data-movimento="reduzido"] {
+  --dur-instante: 60ms; --dur-curta: 120ms; --dur-media: 120ms; --dur-longa: 160ms; --dur-cena: 160ms;
+  --desloc-p: 0px; --desloc-m: 0px; --desloc-g: 0px; --tremor: 0px; --pulo-ponto: 0px;
+  --escala-aperta: 1; --escala-entra: 1; --escala-some: 1; --escala-bate: 1;
+  --giro-fim: 0deg; --giro-op: .35; --bate-op: .45; --brilho-op: 0; --cascata-passo: 0ms;
+}
+
+/* ---------- base de 360 px ---------- */
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  height: 100dvh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: var(--t-b);
+  font-weight: var(--w-texto);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+}
+button, a { min-height: 32px; min-width: 32px; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.wordmark { height: 48px; width: auto; display: block; }
+.wordmark-traco { stroke: var(--fg); }
+.wordmark-ponto { fill: var(--spark); }
+
+/* ---------- casca: barra de cima, área que rola, barra de navegação ---------- */
+.app { height: 100%; display: flex; flex-direction: column; }
+/* barra de cima */
+.topo { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-height: 56px; padding: 0 var(--sp-4); }
+.topo .wordmark { height: 24px; }
+.fila { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 var(--sp-3); border-radius: var(--r-pilula); background: var(--accent-soft); color: var(--fg); font-size: var(--t-s); }
+.ic { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.fila .ic { width: 18px; height: 18px; }
+
+/* faixas */
+.faixa { display: flex; gap: var(--sp-3); align-items: flex-start; margin: 0 var(--sp-4) var(--sp-3); padding: var(--sp-3); border-radius: var(--r-campo); font-size: var(--t-s); line-height: 1.4; }
+.faixa strong { display: block; font-size: var(--t-b); }
+.faixa-info { background: var(--accent-soft); color: var(--fg); }
+.faixa-info .ic { color: var(--accent); }
+.faixa-erro { background: var(--alerta-bg); color: var(--alerta); }
+.faixa-erro .btn-s { margin-top: var(--sp-2); }
+.btn-s { min-height: 44px; padding: 0 var(--sp-4); border-radius: var(--r-botao); border: 1.5px solid currentColor; background: transparent; color: inherit; font: inherit; font-weight: var(--w-forte); }
+
+/* área da tela */
+.tela-area { flex: 1; overflow: hidden auto; position: relative; }
+.tela { padding: 0 var(--sp-4) var(--sp-4); }
+.tela[hidden] { display: none; }
+.tela h1 { margin: var(--sp-2) 0 var(--sp-4); font-size: var(--t-xl); line-height: 1.15; font-weight: var(--w-forte); }
+.cartao { background: var(--surface); border-radius: var(--r-cartao); box-shadow: var(--sh); padding: var(--sp-6) var(--sp-4); text-align: center; }
+.cartao p { margin: var(--sp-2) 0 0; color: var(--muted); font-size: var(--t-s); line-height: 1.4; }
+.cartao strong { font-size: var(--t-l); font-weight: var(--w-forte); }
+.cartao .ic-grande { width: 32px; height: 32px; color: var(--accent); }
+.esq { display: block; background: var(--line); border-radius: var(--r-campo); height: 20px; margin-top: var(--sp-3); animation: pulsa 1.4s var(--ease-suave) var(--laco); }
+.esq.g { height: 64px; border-radius: var(--r-cartao); }
+@keyframes pulsa { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .esq { animation: none; } }
+.entra-dir { animation: entra-dir var(--dur-media) var(--ease-entra); }
+.entra-esq { animation: entra-esq var(--dur-media) var(--ease-entra); }
+@keyframes entra-dir { from { opacity: 0; transform: translateX(var(--desloc-g)); } }
+@keyframes entra-esq { from { opacity: 0; transform: translateX(calc(var(--desloc-g) * -1)); } }
+
+/* tema nos Ajustes */
+.grupo { margin: 0; padding: 0; border: 0; }
+.grupo legend { padding: 0; font-size: var(--t-l); font-weight: var(--w-forte); margin-bottom: var(--sp-3); }
+.opcao { display: flex; align-items: center; gap: var(--sp-3); min-height: var(--toque); padding: 0 var(--sp-4); margin-bottom: var(--sp-2); background: var(--surface); border: 1.5px solid var(--line-strong); border-radius: var(--r-campo); font-size: var(--t-b); }
+.opcao input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; }
+.opcao:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); font-weight: var(--w-forte); }
+.opcao:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
+.apoio { color: var(--muted); font-size: var(--t-s); margin: var(--sp-2) 0 0; }
+
+/* barra de navegação inferior */
+.nav { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface); border-top: 1px solid var(--line); padding: var(--sp-2) var(--sp-1) calc(var(--sp-2) + env(safe-area-inset-bottom)); }
+.nav a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 56px; border-radius: var(--r-campo); font-size: var(--t-xs); font-weight: var(--w-forte); color: var(--muted); text-decoration: none; -webkit-tap-highlight-color: transparent; }
+.nav .pil { display: grid; place-items: center; width: 52px; height: 28px; border-radius: var(--r-pilula); transition: background var(--dur-curta) var(--ease-padrao); }
+.nav a[aria-current="page"] { color: var(--accent); }
+.nav a[aria-current="page"] .pil { background: var(--accent-soft); }
+.nav a:active .pil { background: var(--accent-soft); }
+.nav a:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+[hidden] { display: none !important; }
