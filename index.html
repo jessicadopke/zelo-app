@@ -27,7 +27,13 @@ try {
   <symbol id="i-semnet" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 3-2M2 9a15 15 0 0 1 4-2.6M12 20h.01"/></symbol>
   <symbol id="i-atencao" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></symbol>
   <symbol id="i-ok" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+  <symbol id="i-enviando" viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3"/><path d="M18 3v4h-4M6 21v-4h4"/></symbol>
+  <symbol id="i-espera" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
   <symbol id="i-vazio" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="4"/><path d="M8 11h8M8 15h5"/></symbol>
+  <symbol id="i-olho" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-olho-fechado" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 5.1A9.8 9.8 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.1 4M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7c1.6 0 3-.4 4.3-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
+  <symbol id="i-seta-baixo" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-pontos" viewBox="0 0 24 24"><path d="M12 5h.01M12 12h.01M12 19h.01" stroke-width="3"/></symbol>
 </svg>
 
 <div class="app">
@@ -38,8 +44,10 @@ try {
     </g>
     <circle class="wordmark-ponto" cx="190" cy="61" r="6.5"/>
   </svg>
-    <!-- Indicador da fila de envio: o conteúdo real vem com a fila (1.2.x); aqui só o lugar. -->
-    <span class="fila" id="fila"><svg class="ic" aria-hidden="true"><use href="#i-ok"/></svg><span id="fila-texto">Tudo enviado</span></span>
+    <!-- Indicador da fila de envio: carregando (esqueleto) até o banco responder; depois a pílula, que leva a Ajustes. -->
+    <span class="fila-esq" id="fila-esq" aria-hidden="true"></span>
+    <a class="fila-toque" id="fila-link" href="#ajustes" hidden><span class="fila" id="fila"></span></a>
+    <span class="so-leitor" role="status" aria-live="polite" aria-atomic="true" id="fila-voz"></span>
   </header>
 
   <div class="faixa faixa-info" id="faixa-semnet" role="status" hidden>
@@ -66,13 +74,84 @@ try {
     </section>
     <section class="tela" data-tela="ajustes" aria-labelledby="t-aju" hidden>
       <h1 id="t-aju">Ajustes</h1>
-      <fieldset class="grupo">
+      <section class="envio secao" id="envio" aria-labelledby="envio-h">
+        <h2 id="envio-h" tabindex="-1">Envio dos gastos</h2>
+        <div class="envio-cartao" id="envio-cartao" aria-busy="true">
+          <span class="esq"></span><span class="esq"></span><span class="esq"></span>
+        </div>
+      </section>
+      <!-- 2. Ligação com a planilha (NOVA, parte A) -->
+      <section class="secao" id="ligacao" aria-labelledby="lig-h">
+        <h2 id="lig-h">Ligação com a planilha</h2>
+        <div class="secao-cartao">
+          <p class="secao-intro">Cole aqui uma vez só. Fica guardado neste celular.</p>
+
+          <div class="campo">
+            <label for="f-url">Endereço da ponte</label>
+            <p class="campo-apoio" id="f-url-apoio">Quem montou a ponte te passa este endereço. Começa com https://</p>
+            <div class="campo-linha">
+              <input id="f-url" type="url" autocomplete="off" autocapitalize="none" spellcheck="false" inputmode="url" placeholder="https://" aria-describedby="f-url-apoio f-url-erro">
+            </div>
+            <p class="campo-erro" id="f-url-erro" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
+          </div>
+
+          <div class="campo">
+            <label for="f-cod">Código deste celular</label>
+            <p class="campo-apoio" id="f-cod-apoio">É o código só deste aparelho. Não mostre para outras pessoas.</p>
+            <div class="campo-linha">
+              <input id="f-cod" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="f-cod-apoio f-cod-erro">
+              <button class="btn-olho" id="btn-olho" type="button" aria-pressed="false" aria-label="Mostrar código"><svg class="ic" aria-hidden="true"><use href="#i-olho"/></svg><span>Mostrar</span></button>
+            </div>
+            <p class="campo-erro" id="f-cod-erro" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
+          </div>
+
+          <div class="botoes">
+            <button class="btn-p" id="btn-salvar" type="button">Salvar</button>
+            <button class="btn-sec" id="btn-testar" type="button"><svg class="ic" aria-hidden="true"><use href="#i-ok"/></svg><span>Testar ligação</span></button>
+          </div>
+          <p class="salvo" id="salvo" role="status" hidden><svg class="ic" aria-hidden="true"><use href="#i-ok"/></svg>Salvo neste celular.</p>
+          <!-- Resultado: role=status + aria-live; fica até o próximo toque em Testar/Salvar -->
+          <div class="resultado" id="resultado" role="status" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <fieldset class="grupo secao">
         <legend>Aparência</legend>
         <label class="opcao"><input type="radio" name="tema" value="auto" checked>Automático</label>
         <label class="opcao"><input type="radio" name="tema" value="light">Claro</label>
         <label class="opcao"><input type="radio" name="tema" value="dark">Escuro</label>
         <p class="apoio">Automático segue o tema do celular.</p>
       </fieldset>
+
+      <!-- 4. Como instalar o Zelo (parte C) -->
+      <section class="secao" aria-labelledby="inst-h">
+        <h2 id="inst-h">Como instalar o Zelo</h2>
+        <details class="instalar">
+          <summary>Passo a passo no Android<svg class="ic" aria-hidden="true"><use href="#i-seta-baixo"/></svg></summary>
+          <ol class="passos">
+            <li>Abra o Zelo no Chrome (o endereço que a Jéssica te passou).</li>
+            <li>Toque nos três pontinhos <svg class="ic" role="img" aria-label="menu"><use href="#i-pontos"/></svg> no canto de cima.</li>
+            <li>Toque em “Instalar app” (ou em “Adicionar à tela inicial”).</li>
+            <li>Confirme tocando em “Instalar”.</li>
+            <li>Pronto. Abra o Zelo pelo ícone novo na tela do celular.</li>
+          </ol>
+          <p class="passos-fim">Se já instalou, não precisa fazer nada.</p>
+        </details>
+      </section>
+
+      <!-- 5. Sobre o app (parte B) -->
+      <section class="secao sobre" aria-labelledby="sob-h">
+        <h2 id="sob-h">Sobre o app</h2>
+        <div class="secao-cartao">
+          <dl class="sobre-dados">
+            <dt>Versão do app</dt><dd id="v-app"></dd>
+            <dt>Versão da ponte</dt><dd id="v-ponte" data-vazio>ainda não conferida</dd>
+          </dl>
+          <div class="sobre-aviso" id="aviso-versao" role="status"></div>
+          <button class="btn-sec" id="btn-atual" type="button"><svg class="ic" aria-hidden="true"><use href="#i-enviando"/></svg><span>Buscar atualização</span></button>
+          <div class="resultado" id="atual-res" role="status" aria-live="polite"></div>
+        </div>
+      </section>
     </section>
   </main>
 
@@ -85,6 +164,15 @@ try {
 </div>
 <script src="js/rotas.js"></script>
 <script src="js/tema.js"></script>
+<script src="js/dinheiro.js"></script>
+<script src="js/datas.js"></script>
+<script src="js/db.js"></script>
+<script src="js/fila.js"></script>
+<script src="js/ponte.js"></script>
+<script src="js/lancamentos.js"></script>
+<script src="js/indicador.js"></script>
+<script src="js/somas.js"></script>
+<script src="js/ajustes.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
