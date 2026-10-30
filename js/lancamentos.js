@@ -17,11 +17,13 @@ var Lancamentos = (function () {
     return e;
   }
 
-  // Mais novo primeiro: por data e, na mesma data, por editado_em.
+  // Mais novo primeiro: por data, depois por editado_em e, por fim, por id (crescente). O id desempata para que
+  // lançamentos importados em lote (mesma data e mesmo editado_em) não troquem de lugar a cada desenho.
   function ordenar(lista) {
     return lista.slice().sort(function (a, b) {
       if (a.data !== b.data) return a.data < b.data ? 1 : -1;
       if (a.editado_em !== b.editado_em) return a.editado_em < b.editado_em ? 1 : -1;
+      if (a.id !== b.id) return a.id < b.id ? -1 : 1;
       return 0;
     });
   }
@@ -54,6 +56,6 @@ var Lancamentos = (function () {
     return db.lancamentos.todos().then(visiveis);
   }
 
-  return { criar: criar, editar: editar, apagar: apagar, desfazerApagar: desfazerApagar, listar: listar, todosVisiveis: todosVisiveis };
+  return { criar: criar, editar: editar, apagar: apagar, desfazerApagar: desfazerApagar, listar: listar, todosVisiveis: todosVisiveis, ordenar: ordenar };
 })();
 if (typeof module !== "undefined") module.exports = Lancamentos;

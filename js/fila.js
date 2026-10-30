@@ -8,6 +8,8 @@ var Fila = (function () {
   var TAMANHO_LOTE = 50;
   // Contrato seção 4: só estes campos vão para a ponte.
   var CAMPOS = ["id", "data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "origem", "apagado", "editado_em"];
+  // Como o lançamento nasceu (contrato, seção 4). Ao editar a origem é mantida; origem que o app não conhece vira manual.
+  var ORIGENS = ["manual", "importacao"];
   var EDITAVEIS = ["data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "apagado"];
 
   // Códigos em que vale tentar de novo mais tarde, sem a Jéssica fazer nada.
@@ -80,7 +82,7 @@ var Fila = (function () {
     return {
       id: r.id, data: r.data, tipo: r.tipo, valor_centavos: r.valor_centavos, favorecido: fav,
       categoria: textoOpcional(r.categoria, 40, "categoria"), pessoa: textoOpcional(r.pessoa, 40, "pessoa"),
-      forma: textoOpcional(r.forma, 30, "forma"), origem: "manual", apagado: r.apagado, editado_em: r.editado_em,
+      forma: textoOpcional(r.forma, 30, "forma"), origem: ORIGENS.indexOf(r.origem) >= 0 ? r.origem : "manual", apagado: r.apagado, editado_em: r.editado_em,
     };
   }
 
@@ -426,7 +428,7 @@ var Fila = (function () {
   }
 
   return {
-    TAMANHO_LOTE: TAMANHO_LOTE, novoId: novoId, criar: criar, editar: editar, enviar: enviar, receber: receber,
+    TAMANHO_LOTE: TAMANHO_LOTE, ORIGENS: ORIGENS, novoId: novoId, criar: criar, editar: editar, enviar: enviar, receber: receber,
     estado: estado, lerEstado: lerEstado, aoMudar: aoMudar, mensagem: mensagem, tentarDeNovo: tentarDeNovo,
   };
 })();

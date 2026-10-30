@@ -1,6 +1,6 @@
 // Zelo: núcleo do app. Navegação por abas, tema e cópia offline. O conteúdo das telas vem nas próximas partes.
 // Depende de js/rotas.js (Rotas) e js/tema.js (Tema), carregados antes no index.html.
-const APP_VERSION = "0.4.1";
+const APP_VERSION = "0.5.0";
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -10,7 +10,6 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   if (typeof Rotas === "undefined" || typeof Tema === "undefined") return;
   const $ = (sel, raiz) => (raiz || document).querySelector(sel);
   const $$ = (sel, raiz) => Array.from((raiz || document).querySelectorAll(sel));
-  const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
   // ---- ajudas de desenho (texto sempre como textContent, nunca HTML) ----
   const SVG_NS = $("svg.wordmark").namespaceURI;
@@ -77,27 +76,27 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     e.preventDefault();
     ir(a.dataset.id);
   }));
-  // Botão voltar do Android: mostra a aba anterior, sem empilhar de novo.
-  window.addEventListener("popstate", () => mostrar(Rotas.abaDoHash(location.hash)));
-
+  // O botão voltar do Android (popstate) é tratado mais abaixo, junto com a tela de lançar.
+  const hashInicial = location.hash;
   const inicial = Rotas.abaDoHash(location.hash);
   history.replaceState({ aba: inicial }, "", "#" + inicial);
   mostrar(inicial);
   // Na abertura o foco fica no começo da página, não na área da tela (evita contorno à toa).
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
 
-  // ---- início: saudação e mês (provisório até a tela de resumo) ----
+  // ---- início: saudação (o mês e os números são desenhados por js/tela-ver.js) ----
   const agora = new Date();
   const h = agora.getHours();
   $("#saudacao").textContent = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
-  $("#inicio-apoio").textContent = "O resumo do mês de " + MESES[agora.getMonth()] + " chega em breve.";
 
   // ---- sem internet: faixa informativa, nunca erro ----
   function atualizarRede() {
     $("#faixa-semnet").hidden = navigator.onLine !== false;
+    if (telaVer) telaVer.rede();
   }
   window.addEventListener("online", atualizarRede);
   window.addEventListener("offline", atualizarRede);
+  let telaVer = null; // criada mais abaixo (usa o banco e a ponte do indicador)
   atualizarRede();
 
   // ---- indicador da fila de envio (barra de cima e Ajustes > Envio dos gastos) ----
@@ -196,12 +195,105 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
           versaoApp: APP_VERSION,
         })
         : null;
-      controle = Indicador.criar({ db: db, ponte: ponte, janela: window, pintar: pintar });
+      // Depois de enviar e receber sem parar, baixa as opções da planilha (sem bloquear nada; se falhar, vale a cópia do celular).
+      const aoSincronizar = ponte && typeof Opcoes !== "undefined" ? () => { Opcoes.atualizar(db, ponte); } : null;
+      controle = Indicador.criar({ db: db, ponte: ponte, janela: window, pintar: pintar, aoSincronizar: aoSincronizar });
       controle.iniciar();
       return { db: db, ponte: ponte, controle: controle };
     }).catch(() => { pintar({ erro: true }); return null; });
   }
   const pronto = iniciarIndicador();
+
+  // ---- avisos de baixo ("Guardado…", "Lançamento apagado. Desfazer"): um por vez, por cima da área, sem empurrar nada ----
+  const avisoEl = $("#aviso");
+  let avisoTimer = null, avisoSaida = null;
+  function esconderAviso() {
+    clearTimeout(avisoTimer);
+    clearTimeout(avisoSaida);
+    avisoEl.classList.remove("saindo");
+    avisoEl.textContent = "";
+  }
+  function mostrarAviso(o) {
+    esconderAviso();
+    const texto = el("span", "", o.texto);
+    avisoEl.append(icone(o.icone || "i-ok"), texto);
+    let botao = null;
+    if (o.acao) {
+      botao = el("button", "aviso-acao", o.acao);
+      botao.type = "button";
+      botao.addEventListener("click", () => { esconderAviso(); if (o.aoAcao) o.aoAcao(); });
+      avisoEl.appendChild(botao);
+    }
+    const sumir = () => {
+      // Não some enquanto o botão de desfazer estiver com o foco.
+      if (botao && document.activeElement === botao) { avisoTimer = setTimeout(sumir, 1000); return; }
+      avisoEl.classList.add("saindo");
+      avisoSaida = setTimeout(esconderAviso, movimentoReduzido() ? 0 : 200);
+    };
+    avisoTimer = setTimeout(sumir, o.duracao || 6000);
+  }
+
+  // ---- tela de lançar (Novo e Editar): tela cheia por cima das abas, aberta por #novo e #editar/<id> ----
+  // Cada abertura empilha uma entrada no histórico; o voltar do Android (ou o X) volta à aba de antes sem empilhar de novo.
+  let hashDaTela = "", saindoDeVez = false;
+  const telaLancar = typeof TelaLancar !== "undefined" && typeof Lancar !== "undefined"
+    ? TelaLancar.criar({
+      pronto: pronto,
+      hoje: () => Datas.hoje(),
+      online: () => navigator.onLine !== false,
+      sair: () => { saindoDeVez = true; history.back(); },
+      avisar: mostrarAviso,
+    })
+    : null;
+  function abrirTelaLancar(t, hash) {
+    if (!telaLancar) return;
+    hashDaTela = hash;
+    history.pushState({ aba: atual, tela: true }, "", hash);
+    telaLancar.abrir(t);
+  }
+  $$("[data-novo]").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault();
+    abrirTelaLancar({ tipo: "novo" }, "#novo");
+  }));
+  // ---- telas de ver: Início, Lançamentos e Resumo (js/tela-ver.js) ----
+  if (typeof TelaVer !== "undefined") {
+    telaVer = TelaVer.criar({
+      pronto: pronto,
+      hoje: () => Datas.hoje(),
+      online: () => navigator.onLine !== false,
+      agora: () => Date.now(),
+      ir: (id) => ir(id),
+      novo: () => abrirTelaLancar({ tipo: "novo" }, "#novo"),
+      editar: (id) => abrirTelaLancar({ tipo: "editar", id: id }, "#editar/" + encodeURIComponent(id)),
+    });
+    aoMostrar.push((id) => telaVer.mostrar(id));
+    telaVer.mostrar(atual);
+    // Voltou ao app depois de um tempo: confere se tem lançamento novo (no máximo a cada 5 minutos).
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) telaVer.voltou(); });
+  }
+
+  // Botão voltar do Android: fecha o formulário (perguntando se a pessoa mexeu) ou mostra a aba anterior, sem empilhar de novo.
+  window.addEventListener("popstate", () => {
+    const t = Rotas.telaDoHash(location.hash);
+    if (t) {
+      if (telaLancar && !telaLancar.aberto()) { hashDaTela = location.hash; telaLancar.abrir(t); }
+      return;
+    }
+    if (telaLancar && telaLancar.aberto()) {
+      if (!saindoDeVez && telaLancar.mexeu()) {
+        history.pushState({ aba: atual, tela: true }, "", hashDaTela);
+        telaLancar.pedirSaida();
+        return;
+      }
+      telaLancar.fechar();
+    }
+    saindoDeVez = false;
+    const aba = Rotas.abaDoHash(location.hash);
+    if (aba !== atual) mostrar(aba);
+  });
+  // Aberto direto por #novo ou #editar/<id> (por exemplo, ao recarregar): a aba fica por baixo.
+  const telaInicial = Rotas.telaDoHash(hashInicial);
+  if (telaInicial) abrirTelaLancar(telaInicial, hashInicial);
 
   // ---- Ajustes: ligação com a planilha e sobre o app ----
   // O endereço e o código só vão para o banco do aparelho (e para o corpo do POST, dentro de js/ponte.js).

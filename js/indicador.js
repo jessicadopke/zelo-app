@@ -76,6 +76,8 @@ var Indicador = (function () {
     var cancelar = opcoes.cancelar || function (t) { clearTimeout(t); };
     var agora = opcoes.agora || function () { return Date.now(); };
     var pintar = opcoes.pintar;
+    // Chamada depois de enviar e receber sem parar (ex.: baixar as opções da planilha). Opcional.
+    var aoSincronizar = typeof opcoes.aoSincronizar === "function" ? opcoes.aoSincronizar : null;
     var online = !(janela && janela.navigator && janela.navigator.onLine === false);
     var ultimo = null;     // estado real mais recente
     var mostrado = null;   // estado que está na tela
@@ -84,6 +86,13 @@ var Indicador = (function () {
     var chaveVoz = null;   // o que foi anunciado por último
     var desligar = null;
     var geracao = 0;       // descarta leituras antigas que chegam atrasadas
+    // Sincronização para as telas de ver (#19): só em memória. tentativaEm/sincronizadoEm em milissegundos.
+    var sinc = { sincronizando: false, tentou: false, tentativaEm: null, sincronizadoEm: null };
+    var ouvintesSinc = [];
+    function avisarSinc() {
+      var foto = { sincronizando: sinc.sincronizando, tentou: sinc.tentou, tentativaEm: sinc.tentativaEm, sincronizadoEm: sinc.sincronizadoEm };
+      ouvintesSinc.slice().forEach(function (f) { try { f(foto); } catch (_) { /* uma tela com defeito não atrapalha o envio */ } });
+    }
 
     function configurado() {
       if (!ponte) return Promise.resolve(false);
@@ -160,15 +169,34 @@ var Indicador = (function () {
     // Não faz nada sem internet, sem ponte ou sem configuração. Nunca lança.
     function tentarEnviar() {
       if (!online || !ponte) return Promise.resolve({ pulou: true });
+      var comecou = false;
       return Promise.all([db.fila.contar(), configurado()]).then(function (v) {
         if (!v[1]) return { pulou: true };
+        comecou = true;
+        sinc.sincronizando = true;
+        sinc.tentativaEm = agora();
+        avisarSinc();
         var envio = v[0] ? fila.enviar(db, ponte) : Promise.resolve({});
         return envio.then(function (res) {
           if (res.parou || res.jaEnviando || typeof ponte.chamar !== "function") return res;
-          return fila.receber(db, ponte).then(function (rec) { res.recebimento = rec; return res; });
+          return fila.receber(db, ponte).then(function (rec) {
+            res.recebimento = rec;
+            if (rec && !rec.parou && !rec.jaRecebendo) sinc.sincronizadoEm = agora();
+            if (aoSincronizar && !(rec && rec.parou)) { try { aoSincronizar(); } catch (_) { /* nunca atrapalha o envio */ } }
+            return res;
+          });
         });
-      }).catch(function () { return { pulou: true }; });
+      }).catch(function () { return { pulou: true }; }).then(function (res) {
+        if (comecou) { sinc.sincronizando = false; sinc.tentou = true; avisarSinc(); }
+        return res;
+      });
     }
+    // Telas de ver: quem quer saber quando uma rodada começa e termina. Devolve a função que desliga.
+    function aoSincronia(f) {
+      ouvintesSinc.push(f);
+      return function () { ouvintesSinc = ouvintesSinc.filter(function (o) { return o !== f; }); };
+    }
+    function sincronia() { return { sincronizando: sinc.sincronizando, tentou: sinc.tentou, tentativaEm: sinc.tentativaEm, sincronizadoEm: sinc.sincronizadoEm }; }
 
     function iniciar() {
       pintar({ carregando: true });
@@ -187,7 +215,7 @@ var Indicador = (function () {
 
     function parar() { if (desligar) desligar(); desligar = null; if (timer !== null) { cancelar(timer); timer = null; } }
 
-    return { iniciar: iniciar, atualizar: atualizar, tentarEnviar: tentarEnviar, parar: parar };
+    return { iniciar: iniciar, atualizar: atualizar, tentarEnviar: tentarEnviar, aoSincronia: aoSincronia, sincronia: sincronia, parar: parar };
   }
 
   return { ATRASO_ENVIANDO: ATRASO_ENVIANDO, MINIMO_ENVIANDO: MINIMO_ENVIANDO, textos: textos, horaLocal: horaLocal, criar: criar };

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Zelo</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#F4F7F7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0C1A1D" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -33,6 +33,14 @@ try {
   <symbol id="i-olho" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
   <symbol id="i-olho-fechado" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 5.1A9.8 9.8 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.1 4M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7c1.6 0 3-.4 4.3-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
   <symbol id="i-seta-baixo" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-mais" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-fechar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-saiu" viewBox="0 0 24 24"><path d="M7 17L17 7"/><path d="M9 7h8v8"/></symbol>
+  <symbol id="i-entrou" viewBox="0 0 24 24"><path d="M17 7L7 17"/><path d="M15 17H7V9"/></symbol>
+  <symbol id="i-lixeira" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-seta-esq" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-seta-dir" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
   <symbol id="i-pontos" viewBox="0 0 24 24"><path d="M12 5h.01M12 12h.01M12 19h.01" stroke-width="3"/></symbol>
 </svg>
 
@@ -59,18 +67,24 @@ try {
     <div><strong>Não consegui abrir esta tela</strong>Nada se perdeu. Tente de novo em instantes.<br><button class="btn-s" id="erro-de-novo" type="button">Tentar de novo</button></div>
   </div>
 
+  <div class="tela-pai">
   <main class="tela-area" id="conteudo" tabindex="-1">
     <section class="tela" data-tela="inicio" aria-labelledby="t-inicio">
       <h1 id="t-inicio">Início</h1>
-      <div class="cartao"><svg class="ic ic-grande" aria-hidden="true"><use href="#i-casa"/></svg><p><strong id="saudacao">Olá</strong></p><p id="inicio-apoio">O resumo do mês chega em breve.</p></div>
+      <div class="atalho-novo"><a class="btn-p" href="#novo" data-novo><svg class="ic" aria-hidden="true"><use href="#i-mais"/></svg>Novo lançamento</a></div>
+      <p class="inicio-saudacao" id="saudacao">Olá</p>
+      <div id="ini-conteudo"></div>
     </section>
     <section class="tela" data-tela="lancamentos" aria-labelledby="t-lan" hidden>
       <h1 id="t-lan">Lançamentos</h1>
-      <div class="cartao"><svg class="ic ic-grande" aria-hidden="true"><use href="#i-vazio"/></svg><p><strong>Nenhum lançamento por aqui ainda</strong></p><p>Quando você anotar o primeiro gasto ou a primeira entrada, ele aparece nesta lista.</p></div>
+      <div class="atalho-novo"><a class="btn-p" href="#novo" data-novo><svg class="ic" aria-hidden="true"><use href="#i-mais"/></svg>Novo lançamento</a></div>
+      <div id="lan-conteudo"></div>
+      <p class="so-leitor" id="lan-voz" role="status" aria-live="polite" aria-atomic="true"></p>
     </section>
     <section class="tela" data-tela="resumo" aria-labelledby="t-res" hidden>
       <h1 id="t-res">Resumo</h1>
-      <div class="cartao"><svg class="ic ic-grande" aria-hidden="true"><use href="#i-resumo"/></svg><p><strong>Ainda não há o que somar</strong></p><p>Depois dos primeiros lançamentos, aqui aparece para onde foi o dinheiro do mês.</p></div>
+      <div id="res-conteudo"></div>
+      <p class="so-leitor" id="res-voz" role="status" aria-live="polite" aria-atomic="true"></p>
     </section>
     <section class="tela" data-tela="ajustes" aria-labelledby="t-aju" hidden>
       <h1 id="t-aju">Ajustes</h1>
@@ -154,6 +168,9 @@ try {
       </section>
     </section>
   </main>
+  <!-- Aviso de baixo ("Guardado…", "Lançamento apagado. Desfazer"): por cima da área, sem empurrar nada. Vazio some. -->
+  <div class="aviso-fixo" id="aviso" role="status"></div>
+  </div>
 
   <nav class="nav" aria-label="Telas do Zelo">
     <a href="#inicio" data-id="inicio" aria-current="page"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-casa"/></svg></span>Início</a>
@@ -161,6 +178,101 @@ try {
     <a href="#resumo" data-id="resumo"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-resumo"/></svg></span>Resumo</a>
     <a href="#ajustes" data-id="ajustes"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-ajustes"/></svg></span>Ajustes</a>
   </nav>
+</div>
+<!-- Formulário de lançar (Novo e Editar): tela cheia por cima das abas, aberta por #novo e #editar/<id>. -->
+<section class="form" id="form" aria-labelledby="form-t" hidden>
+  <header class="form-topo">
+    <button class="btn-icone" id="lf-x" type="button" aria-label="Descartar e fechar"><svg class="ic" aria-hidden="true"><use href="#i-fechar"/></svg></button>
+    <h1 id="form-t" tabindex="-1">Novo lançamento</h1>
+  </header>
+  <div class="form-corpo" id="form-corpo">
+    <div id="lf-carregando" aria-busy="true" hidden><span class="esq g"></span><span class="esq g"></span><span class="esq g"></span><span class="esq g"></span></div>
+    <div class="cartao" id="lf-naoachei" hidden>
+      <svg class="ic ic-grande" aria-hidden="true"><use href="#i-vazio"/></svg>
+      <p><strong>Não achei este lançamento.</strong></p>
+      <p>Ele pode ter sido apagado.</p>
+      <button class="btn-p" id="lf-voltar" type="button">Voltar</button>
+    </div>
+    <form id="lf-campos" novalidate autocomplete="off">
+      <div class="faixa faixa-info" id="lf-semnet" role="status" hidden style="margin:0 0 var(--sp-4)">
+        <svg class="ic" aria-hidden="true"><use href="#i-semnet"/></svg>
+        <div><strong>Sem internet por enquanto</strong>Pode salvar. O Zelo envia quando a conexão voltar.</div>
+      </div>
+      <div class="form-nota" id="lf-nota" role="status"></div>
+
+      <fieldset class="campo-grupo">
+        <legend>Tipo</legend>
+        <div class="escolhas dois">
+          <label class="escolha"><svg class="ic ic-tipo saiu" aria-hidden="true"><use href="#i-saiu"/></svg><input type="radio" name="lf-tipo" value="saiu" checked>Saiu<svg class="ic ic-ok" aria-hidden="true"><use href="#i-ok"/></svg></label>
+          <label class="escolha"><svg class="ic ic-tipo entrou" aria-hidden="true"><use href="#i-entrou"/></svg><input type="radio" name="lf-tipo" value="entrou">Entrou<svg class="ic ic-ok" aria-hidden="true"><use href="#i-ok"/></svg></label>
+        </div>
+      </fieldset>
+
+      <div class="campo">
+        <label for="lf-valor">Valor</label>
+        <div class="campo-linha entrada-prefixo"><span class="prefixo" aria-hidden="true">R$</span><input id="lf-valor" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" enterkeyhint="next" aria-describedby="lf-valor-erro"></div>
+        <p class="campo-erro" id="lf-valor-erro" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
+      </div>
+
+      <div class="campo">
+        <label for="lf-data">Data</label>
+        <div class="campo-linha"><input id="lf-data" type="date" min="2000-01-01" max="2099-12-31" aria-describedby="lf-data-erro lf-data-aviso"></div>
+        <p class="campo-erro" id="lf-data-erro" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
+        <p class="nota-ic nota-aviso" id="lf-data-aviso" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
+      </div>
+
+      <div class="campo">
+        <label for="lf-fav" id="lf-fav-rotulo">Quem recebeu</label>
+        <p class="campo-apoio" id="lf-fav-apoio">Só o nome. Não escreva CPF, cartão nem telefone.</p>
+        <div class="campo-linha"><input id="lf-fav" type="text" maxlength="80" autocomplete="off" autocapitalize="words" enterkeyhint="done" aria-describedby="lf-fav-apoio lf-fav-erro"></div>
+        <p class="campo-erro" id="lf-fav-erro" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
+        <div class="sugestoes" id="lf-sug" hidden><p class="sugestoes-t" id="lf-sug-t">Usados antes</p><ul id="lf-sug-lista" aria-labelledby="lf-sug-t"></ul></div>
+      </div>
+
+      <fieldset class="campo-grupo" id="lf-cat-grupo">
+        <legend>Categoria <span class="opc">opcional</span></legend>
+        <div class="skel-escolhas" id="lf-cat-esq" aria-hidden="true" hidden><span class="esq"></span><span class="esq"></span><span class="esq"></span></div>
+        <div class="escolhas" id="lf-cat" role="radiogroup" aria-describedby="lf-cat-erro lf-cat-nota"></div>
+        <div class="campo-linha" id="lf-cat-lista-linha" hidden><select id="lf-cat-lista" aria-label="Categoria" aria-describedby="lf-cat-erro lf-cat-nota"></select></div>
+        <p class="campo-erro" id="lf-cat-erro" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
+        <p class="nota-ic" id="lf-cat-nota" role="status"></p>
+      </fieldset>
+
+      <div class="campo">
+        <label for="lf-pes" id="lf-pes-rotulo">Quem pagou</label>
+        <div class="campo-linha"><select id="lf-pes" aria-describedby="lf-pes-erro"></select></div>
+        <p class="campo-erro" id="lf-pes-erro" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
+      </div>
+
+      <div class="campo">
+        <label for="lf-forma">Forma <span class="opc">opcional</span></label>
+        <div class="campo-linha"><select id="lf-forma" aria-describedby="lf-forma-erro"></select></div>
+        <p class="campo-erro" id="lf-forma-erro" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
+      </div>
+
+      <p class="nota-ic" id="lf-listas-nota" hidden><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg><span>As opções aparecem depois da primeira conexão.</span></p>
+
+      <div class="form-apagar" id="lf-apagar-bloco" hidden>
+        <button class="btn-sec btn-atencao" id="lf-apagar" type="button"><svg class="ic" aria-hidden="true"><use href="#i-lixeira"/></svg><span>Apagar lançamento</span></button>
+        <p class="apoio">Ele some da lista, mas dá para desfazer logo depois.</p>
+      </div>
+    </form>
+  </div>
+  <footer class="form-rodape">
+    <div class="resultado rodape-aviso" id="lf-erro-banco" role="alert"></div>
+    <button class="btn-sec" id="lf-descartar" type="button">Descartar</button>
+    <button class="btn-p" id="lf-salvar" type="button">Salvar</button>
+  </footer>
+</section>
+<div class="folha-fundo" id="lf-folha-fundo" hidden>
+  <div class="folha" role="alertdialog" aria-modal="true" aria-labelledby="lf-folha-t">
+    <h2 id="lf-folha-t" tabindex="-1">Descartar o que você digitou?</h2>
+    <p>Nada será guardado.</p>
+    <div class="botoes">
+      <button class="btn-p" id="lf-continuar" type="button">Continuar editando</button>
+      <button class="btn-sec btn-atencao" id="lf-descartar-sim" type="button">Descartar</button>
+    </div>
+  </div>
 </div>
 <script src="js/rotas.js"></script>
 <script src="js/tema.js"></script>
@@ -172,7 +284,13 @@ try {
 <script src="js/lancamentos.js"></script>
 <script src="js/indicador.js"></script>
 <script src="js/somas.js"></script>
+<script src="js/ver.js"></script>
 <script src="js/ajustes.js"></script>
+<script src="js/formulario.js"></script>
+<script src="js/opcoes.js"></script>
+<script src="js/lancar.js"></script>
+<script src="js/tela-lancar.js"></script>
+<script src="js/tela-ver.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

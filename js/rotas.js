@@ -27,6 +27,14 @@ var Rotas = (function () {
     if (i === j) return null;
     return j > i ? "dir" : "esq";
   }
-  return { ABAS: ABAS, PADRAO: PADRAO, abaDoHash: abaDoHash, rotulo: rotulo, titulo: titulo, direcao: direcao };
+  // Telas de tela cheia, fora das abas: "#novo" -> { tipo: "novo" }; "#editar/<id>" -> { tipo: "editar", id }. O resto -> null.
+  // O id só pode ter letras, números e traço (o que o app gera); qualquer outra coisa não abre nada.
+  function telaDoHash(hash) {
+    var h = String(hash || "").replace(/^#/, "");
+    if (h === "novo") return { tipo: "novo" };
+    var m = /^editar\/([0-9A-Za-z-]{1,64})$/.exec(h);
+    return m ? { tipo: "editar", id: m[1] } : null;
+  }
+  return { ABAS: ABAS, PADRAO: PADRAO, abaDoHash: abaDoHash, telaDoHash: telaDoHash, rotulo: rotulo, titulo: titulo, direcao: direcao };
 })();
 if (typeof module !== "undefined") module.exports = Rotas;
