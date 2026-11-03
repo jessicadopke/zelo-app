@@ -251,8 +251,32 @@ var Ver = (function () {
     return { linhas: linhas, total: total };
   }
 
+  // ---- bloco "Conta" do Resumo (#72): só texto; os números vêm de Somas.contaNoMes (c) ----
+  // Sem saldo conferido antes do mês (c.inicio null) não há número nenhum. Mês corrente: segunda linha "Hoje".
+  function valorDaConta(centavos) {
+    var estado = centavos < 0 ? "negativa" : centavos === 0 ? "zerada" : "na_conta";
+    return { estado: estado, palavra: estado === "negativa" ? "Negativa" : estado === "zerada" ? "Zerada" : "Na conta", valor: (centavos < 0 ? MENOS : "") + formatar(Math.abs(centavos)) };
+  }
+  function conta(c, comLancamentos, hoje) {
+    if (!c || typeof c.inicio !== "number") return { tem: false, frase: "Aparece depois de conferir o saldo da conta numa data antes deste mês." };
+    var corrente = Dat.mes(hoje) === c.mes;
+    var fim = typeof c.fim === "number" ? c.fim : c.inicio;
+    var ini = Dat.dosDoMes(Dat.mesAnterior(c.mes)).ate;
+    var o = {
+      tem: true,
+      apoio: corrente ? "O que tinha na conta quando o mês começou e como está hoje." : "O que tinha na conta quando o mês começou e quando terminou.",
+      linhas: [
+        Object.assign({ rotulo: "Começou com", sub: "Em " + Dat.paraTela(ini) }, valorDaConta(c.inicio)),
+        Object.assign({ rotulo: corrente ? "Hoje" : "Terminou com", sub: "Em " + Dat.paraTela(c.ate_fim) }, valorDaConta(fim))
+      ],
+      aviso: c.acerto && c.conferida_fim ? "Inclui saldo conferido em " + Dat.paraTela(c.conferida_fim).slice(0, 5) : "",
+      soma: comLancamentos ? "“Começou com” mais “Saldo do mês” nem sempre dá “Terminou com”. Compra no cartão, fatura, caixinha e saldo conferido mexem na conta de outro jeito." : ""
+    };
+    return o;
+  }
+
   return {
-    reais: formatar, FATURAS: FATURAS, opcoesDeCartao: opcoesDeCartao, temFatura: temFatura, notaDeMovimentos: notaDeMovimentos, cartoes: cartoes, SEM: SEM, TAMANHO: TAMANHO, filtrar: filtrar, opcoesDeFiltro: opcoesDeFiltro, totais: totais, paginar: paginar, maisUm: maisUm,
+    conta: conta, reais: formatar, FATURAS: FATURAS, opcoesDeCartao: opcoesDeCartao, temFatura: temFatura, notaDeMovimentos: notaDeMovimentos, cartoes: cartoes, SEM: SEM, TAMANHO: TAMANHO, filtrar: filtrar, opcoesDeFiltro: opcoesDeFiltro, totais: totais, paginar: paginar, maisUm: maisUm,
     dinheiro: dinheiro, saldo: saldo, linha: linha, porDia: porDia, mesesDisponiveis: mesesDisponiveis, vizinho: vizinho, nomeDoMes: nomeDoMes,
     contagem: contagem, mostrando: mostrando, maisRotulo: maisRotulo, pendentes: pendentes, atualizadoEm: atualizadoEm, vazio: vazio,
   };

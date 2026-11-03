@@ -211,6 +211,34 @@ var Somas = (function () {
     return { app: app, banco: valorBanco, diferenca: valorBanco - app, primeira: primeira, maisNovo: maisNovo };
   }
 
+  // Conta no começo e no fim de um mês (issue #72, opção A da nota saldo-entre-meses). "A conta" é o total (Somas.saldos(...).conta).
+  // inicio = conta no último dia do mês anterior; fim = conta no último dia do mês (ou em "hoje", se o mês é o de hoje).
+  // Sem saldo conferido da conta até a data, o número é null (nunca soma desde zero). acerto = há saldo conferido da conta dentro do mês.
+  function contaNoMes(lancamentos, mes, hoje) {
+    if (!mesValido(mes)) throw new TypeError("Mês inválido: use AAAA-MM.");
+    if (!Dat.valida(hoje)) throw new TypeError("Data inválida: use AAAA-MM-DD.");
+    if (!Array.isArray(lancamentos)) throw new TypeError("Os lançamentos devem vir em uma lista.");
+    var limites = Dat.dosDoMes(mes);
+    var ateIni = Dat.dosDoMes(Dat.mesAnterior(mes)).ate;
+    var ateFim = Dat.mes(hoje) === mes ? hoje : limites.ate;
+    var a = saldos(lancamentos, ateIni), b = saldos(lancamentos, ateFim);
+    var acerto = lancamentos.some(function (l) {
+      if (l === null || typeof l !== "object" || l.tipo !== "saldo" || l.apagado === "sim") return false;
+      if (!Dat.valida(l.data) || l.data < limites.de || l.data > ateFim || !valorDoMovimento(l)) return false;
+      var d = lugarDoSaldo(l);
+      return !!d && d.lugar === "conta";
+    });
+    return {
+      mes: mes,
+      inicio: a.conta_conferida === null ? null : a.conta,
+      fim: b.conta_conferida === null ? null : b.conta,
+      ate_fim: ateFim,
+      conferida_inicio: a.conta_conferida,
+      conferida_fim: b.conta_conferida,
+      acerto: acerto
+    };
+  }
+
   // Quanto foi pago de fatura no mês (soma dos "fatura" não apagados com data no mês). Só para a nota do Resumo (#37, P4).
   function faturasDoMes(lancamentos, mes) {
     if (!mesValido(mes)) throw new TypeError("Mês inválido: use AAAA-MM.");
@@ -222,6 +250,6 @@ var Somas = (function () {
     }, 0);
   }
 
-  return { resumoDoMes: resumoDoMes, saldos: saldos, conferencia: conferencia, faturasDoMes: faturasDoMes };
+  return { resumoDoMes: resumoDoMes, saldos: saldos, contaNoMes: contaNoMes, conferencia: conferencia, faturasDoMes: faturasDoMes };
 })();
 if (typeof module !== "undefined") module.exports = Somas;

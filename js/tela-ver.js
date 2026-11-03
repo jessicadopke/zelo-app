@@ -117,7 +117,7 @@ var TelaVer = (function () {
       var p = el("dd", "din-p");
       if (comIcone) p.appendChild(ic(s.sinal === "neg" ? "i-atencao" : "i-ok"));
       p.append(s.palavra);
-      d.append(el("dt", "din-rot", rotulo || "Saldo"), el("dd", "din-v", s.valor), p);
+      d.append(el("dt", "din-rot", rotulo || "Saldo do mês"), el("dd", "din-v", s.valor), p);
       return d;
     }
     function blocoTotais(t) {
@@ -640,6 +640,32 @@ var TelaVer = (function () {
       return sec;
     }
 
+    // Bloco "Conta" do Resumo (#72): começou com / terminou com (ou hoje). Os números vêm de Somas.contaNoMes sobre todos os lançamentos.
+    function blocoConta(d, comLancamentos) {
+      var c = Ver_.conta(Som.contaNoMes(d.todos, d.mes, env.hoje()), comLancamentos, env.hoje());
+      var sec = el("section", "painel onde");
+      var h = el("h2", "", "Conta"); h.setAttribute("id", "h-conta");
+      sec.setAttribute("aria-labelledby", "h-conta");
+      sec.appendChild(h);
+      if (!c.tem) { sec.appendChild(el("p", "onde-frase", c.frase)); return sec; }
+      sec.appendChild(el("p", "apoio", c.apoio));
+      var ul = el("ul");
+      c.linhas.forEach(function (x, i) {
+        var li = el("li", i === c.linhas.length - 1 ? "fim" : ""), linha = el("div", "onde-linha");
+        linha.append(textoOnde(x.rotulo, x.sub), dinOnde(x.estado, x.palavra, x.valor, x.estado === "negativa"));
+        li.appendChild(linha);
+        ul.appendChild(li);
+      });
+      sec.appendChild(ul);
+      [c.aviso, c.soma].forEach(function (t) {
+        if (!t) return;
+        var n = el("p", "res-nota");
+        n.append(ic("i-info"), t);
+        sec.appendChild(n);
+      });
+      return sec;
+    }
+
     function secaoCartoesRes(d) {
       var c = dadosDeCartoes(d, Dat.dosDoMes(d.mes).ate);
       if (!c) return null;
@@ -709,13 +735,16 @@ var TelaVer = (function () {
       raiz.appendChild(seletorMes());
       var texto;
       if (d.lista.length === 0) {
-        raiz.appendChild(cartao(Ver_.vazio(contextoVazio(d, false)), limparFiltros));
+        var vz = Ver_.vazio(contextoVazio(d, false));
+        raiz.appendChild(cartao(vz, limparFiltros));
+        if (vz.tipo === "mes") raiz.appendChild(blocoConta(d, false));
         var cv = secaoCartoesRes(d);
         if (cv) raiz.appendChild(cv);
         texto = Ver_.nomeDoMes(d.mes) + ": nenhum lançamento";
       } else {
         var r = Som.resumoDoMes(d.lista, d.mes);
         raiz.appendChild(blocoTotais(r));
+        raiz.appendChild(blocoConta(d, true));
         var cr = secaoCartoesRes(d);
         if (cr) raiz.appendChild(cr);
         raiz.appendChild(bloco("h-cat", "Para onde foi", "O que entrou e saiu em cada categoria. A barra mostra o que saiu.", r.porCategoria, "categoria", "Sem categoria"));

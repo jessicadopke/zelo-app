@@ -24,6 +24,7 @@ var Reserva = (function () {
     tirar_apoio: "O dinheiro sai da caixinha e volta para a conta. Não conta como renda.",
     passar_apoio: "O dinheiro muda de caixinha. A conta não muda e não conta como gasto nem como renda.",
     conferir_apoio: "Digite o saldo que o banco mostra. O Zelo passa a contar a partir dele, sem apagar nada do que já está lançado.",
+    conferir_conta_apoio: "Para a conta, digite o total das contas. O dinheiro de antes do primeiro lançamento entra aqui, uma vez, no dia anterior a ele. Não vira entrada.",
     escolha_caixinha: "Escolha a caixinha.",
     escolha_origem: "Escolha de qual caixinha sai.",
     escolha_destino: "Escolha para qual caixinha vai.",
@@ -263,7 +264,7 @@ var Reserva = (function () {
   function rotulosDoLugar(tipo) {
     if (tipo === "caixinha") return { valor: "Saldo da caixinha", apoio: "Quanto o banco mostra para esta caixinha." };
     if (tipo === "cartao") return { valor: "Total em aberto no cartão", apoio: "Quanto ainda falta pagar, somando tudo o que foi comprado e não foi pago." };
-    return { valor: "Saldo no banco", apoio: "Como está no extrato ou no app do banco." };
+    return { valor: "Saldo no banco", apoio: "Total das contas, como está no extrato ou no app do banco." };
   }
 
   // Resultado antes de salvar (seção 7.2). conf = Somas.conferencia(...). Devolve { tipo, linhas: [texto], maisNovo }.

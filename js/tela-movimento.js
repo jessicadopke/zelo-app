@@ -210,6 +210,7 @@ var TelaMovimento = (function () {
       var rot = Res.rotulosDoLugar(lugar ? lugar.tipo : "conta");
       refs.valor.rotulo.textContent = rot.valor;
       refs.valor.apoio.textContent = rot.apoio;
+      pintarStatus(refs.notaConta, lugar && lugar.tipo === "conta" ? "conta" : "", function (p) { p.append(ic("i-info"), Res.TEXTOS.conferir_conta_apoio); });
       var v = valorCentavos();
       var data = refs.data.input.value;
       var conf = null;
@@ -313,7 +314,9 @@ var TelaMovimento = (function () {
         if (editar) inicialLugar = itens[0].valor;
         refs.lugar = grupo("O que você quer conferir?", "mv-lugar", itens, inicialLugar, function () { refs.lugar.mostrarErro(""); atualizar(); });
         campos.appendChild(refs.lugar.no);
-        refs.valor = campoValor("Saldo no banco", "Como está no extrato ou no app do banco.");
+        refs.notaConta = notaIc("i-info", "");
+        campos.appendChild(refs.notaConta);
+        refs.valor = campoValor("Saldo no banco", Res.rotulosDoLugar("conta").apoio);
         campos.appendChild(refs.valor.no);
       }
       refs.data = t === "conferir" ? campoData("Em que dia?", "O saldo vale para o fim deste dia.") : campoData("Data");
