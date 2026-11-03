@@ -28,6 +28,7 @@ try {
   <symbol id="i-atencao" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></symbol>
   <symbol id="i-ok" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
   <symbol id="i-enviando" viewBox="0 0 24 24"><path d="M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3"/><path d="M18 3v4h-4M6 21v-4h4"/></symbol>
+  <symbol id="i-trocar" viewBox="0 0 24 24"><path d="M5 8h13l-3-3"/><path d="M19 16H6l3 3"/></symbol>
   <symbol id="i-espera" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
   <symbol id="i-vazio" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="4"/><path d="M8 11h8M8 15h5"/></symbol>
   <symbol id="i-olho" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
@@ -41,6 +42,11 @@ try {
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
   <symbol id="i-seta-esq" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
   <symbol id="i-seta-dir" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-cartao" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h3"/></symbol>
+  <symbol id="i-caixinha" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="12" rx="3"/><path d="M3 12h18M10 12v2.5h4V12M7 8V6.5A2.5 2.5 0 0 1 9.5 4h5A2.5 2.5 0 0 1 17 6.5V8"/></symbol>
+  <symbol id="i-guardar" viewBox="0 0 24 24"><path d="M12 4v10M8 10.5l4 4 4-4"/><path d="M5 19h14"/></symbol>
+  <symbol id="i-tirar" viewBox="0 0 24 24"><path d="M12 15V5M8 8.5l4-4 4 4"/><path d="M5 19h14"/></symbol>
+  <symbol id="i-passar" viewBox="0 0 24 24"><path d="M5 8h13M14.5 4.5L18 8l-3.5 3.5"/><path d="M19 16H6M9.5 12.5L6 16l3.5 3.5"/></symbol>
   <symbol id="i-pontos" viewBox="0 0 24 24"><path d="M12 5h.01M12 12h.01M12 19h.01" stroke-width="3"/></symbol>
 </svg>
 
@@ -70,14 +76,26 @@ try {
   <div class="tela-pai">
   <main class="tela-area" id="conteudo" tabindex="-1">
     <section class="tela" data-tela="inicio" aria-labelledby="t-inicio">
-      <h1 id="t-inicio">Início</h1>
-      <div class="atalho-novo"><a class="btn-p" href="#novo" data-novo><svg class="ic" aria-hidden="true"><use href="#i-mais"/></svg>Novo lançamento</a></div>
-      <p class="inicio-saudacao" id="saudacao">Olá</p>
-      <div id="ini-conteudo"></div>
+      <div id="ini-principal">
+        <h1 id="t-inicio">Início</h1>
+        <div class="atalho-novo"><a class="btn-p" href="#novo" data-novo><svg class="ic" aria-hidden="true"><use href="#i-mais"/></svg>Novo lançamento</a></div>
+        <p class="inicio-saudacao" id="saudacao">Olá</p>
+        <div id="ini-conteudo"></div>
+      </div>
+      <!-- Reserva (#reserva): tela dentro do Início; a barra de baixo continua com "Início" marcado. -->
+      <div id="reserva-tela" hidden>
+        <div class="reserva-cab">
+          <button class="btn-icone" id="rs-voltar" type="button" aria-label="Voltar para o Início"><svg class="ic" aria-hidden="true"><use href="#i-seta-esq"/></svg></button>
+          <h1 id="rs-titulo" tabindex="-1">Reserva</h1>
+        </div>
+        <div id="reserva-conteudo"></div>
+        <p class="so-leitor" id="rs-voz" role="status" aria-live="polite" aria-atomic="true"></p>
+      </div>
     </section>
     <section class="tela" data-tela="lancamentos" aria-labelledby="t-lan" hidden>
-      <h1 id="t-lan">Lançamentos</h1>
+      <h1 id="t-lan" tabindex="-1">Lançamentos</h1>
       <div class="atalho-novo"><a class="btn-p" href="#novo" data-novo><svg class="ic" aria-hidden="true"><use href="#i-mais"/></svg>Novo lançamento</a></div>
+      <div id="lan-nota"></div>
       <div id="lan-conteudo"></div>
       <p class="so-leitor" id="lan-voz" role="status" aria-live="polite" aria-atomic="true"></p>
     </section>
@@ -202,26 +220,39 @@ try {
 
       <fieldset class="campo-grupo">
         <legend>Tipo</legend>
-        <div class="escolhas dois">
+        <div class="escolhas dois" id="lf-tipos">
           <label class="escolha"><svg class="ic ic-tipo saiu" aria-hidden="true"><use href="#i-saiu"/></svg><input type="radio" name="lf-tipo" value="saiu" checked>Saiu<svg class="ic ic-ok" aria-hidden="true"><use href="#i-ok"/></svg></label>
           <label class="escolha"><svg class="ic ic-tipo entrou" aria-hidden="true"><use href="#i-entrou"/></svg><input type="radio" name="lf-tipo" value="entrou">Entrou<svg class="ic ic-ok" aria-hidden="true"><use href="#i-ok"/></svg></label>
+          <label class="escolha" id="lf-tipo-fatura" hidden><svg class="ic ic-tipo fatura" aria-hidden="true"><use href="#i-cartao"/></svg><input type="radio" name="lf-tipo" value="fatura">Fatura<svg class="ic ic-ok" aria-hidden="true"><use href="#i-ok"/></svg></label>
         </div>
+        <p class="campo-apoio" id="lf-tipo-apoio" style="margin-top:var(--sp-2)" hidden>Pagamento da fatura do cartão. Não conta como gasto.</p>
+      </fieldset>
+
+      <fieldset class="campo-grupo" id="lf-qual-grupo" hidden>
+        <legend>Qual cartão?</legend>
+        <div class="escolhas" id="lf-qual" role="radiogroup" aria-describedby="lf-qual-erro"></div>
+        <div class="campo-linha" id="lf-qual-lista-linha" hidden><select id="lf-qual-lista" aria-label="Qual cartão?" aria-describedby="lf-qual-erro"></select></div>
+        <p class="campo-erro" id="lf-qual-erro" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
+        <p class="nota-ic nota-aviso" id="lf-qual-fora" role="status" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span>Este cartão não está mais na lista.</span></p>
       </fieldset>
 
       <div class="campo">
-        <label for="lf-valor">Valor</label>
-        <div class="campo-linha entrada-prefixo"><span class="prefixo" aria-hidden="true">R$</span><input id="lf-valor" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" enterkeyhint="next" aria-describedby="lf-valor-erro"></div>
+        <label for="lf-valor" id="lf-valor-rotulo">Valor</label>
+        <div class="campo-linha entrada-prefixo"><span class="prefixo" aria-hidden="true">R$</span><input id="lf-valor" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" enterkeyhint="next" aria-describedby="lf-valor-erro lf-valor-aviso"></div>
         <p class="campo-erro" id="lf-valor-erro" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
+        <p class="nota-ic nota-aviso" id="lf-valor-aviso" role="status"></p>
       </div>
 
       <div class="campo">
-        <label for="lf-data">Data</label>
+        <label for="lf-data" id="lf-data-rotulo">Data</label>
         <div class="campo-linha"><input id="lf-data" type="date" min="2000-01-01" max="2099-12-31" aria-describedby="lf-data-erro lf-data-aviso"></div>
         <p class="campo-erro" id="lf-data-erro" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
         <p class="nota-ic nota-aviso" id="lf-data-aviso" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
       </div>
 
-      <div class="campo">
+      <p class="nota-ic" id="lf-aberto" role="status" hidden></p>
+
+      <div class="campo" id="lf-fav-campo">
         <label for="lf-fav" id="lf-fav-rotulo">Quem recebeu</label>
         <p class="campo-apoio" id="lf-fav-apoio">Só o nome. Não escreva CPF, cartão nem telefone.</p>
         <div class="campo-linha"><input id="lf-fav" type="text" maxlength="80" autocomplete="off" autocapitalize="words" enterkeyhint="done" aria-describedby="lf-fav-apoio lf-fav-erro"></div>
@@ -238,13 +269,23 @@ try {
         <p class="nota-ic" id="lf-cat-nota" role="status"></p>
       </fieldset>
 
-      <div class="campo">
+      <fieldset class="campo-grupo" id="lf-lugar-grupo" hidden>
+        <legend id="lf-lugar-legenda">Como pagou</legend>
+        <p class="campo-apoio" id="lf-lugar-apoio">Escolha um cartão se foi compra no crédito.</p>
+        <div class="escolhas" id="lf-lugar" role="radiogroup" aria-describedby="lf-lugar-erro"></div>
+        <div class="campo-linha" id="lf-lugar-lista-linha" hidden><select id="lf-lugar-lista" aria-label="Como pagou" aria-describedby="lf-lugar-erro"></select></div>
+        <p class="campo-erro" id="lf-lugar-erro" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
+        <p class="nota-ic nota-aviso" id="lf-lugar-fora" role="status" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span>Este cartão não está mais na lista.</span></p>
+        <p class="nota-ic" id="lf-forma-auto" role="status" hidden><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg><span>Forma: cartão. O Zelo preenche sozinho.</span></p>
+      </fieldset>
+
+      <div class="campo" id="lf-pes-campo">
         <label for="lf-pes" id="lf-pes-rotulo">Quem pagou</label>
         <div class="campo-linha"><select id="lf-pes" aria-describedby="lf-pes-erro"></select></div>
         <p class="campo-erro" id="lf-pes-erro" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
       </div>
 
-      <div class="campo">
+      <div class="campo" id="lf-forma-campo">
         <label for="lf-forma">Forma <span class="opc">opcional</span></label>
         <div class="campo-linha"><select id="lf-forma" aria-describedby="lf-forma-erro"></select></div>
         <p class="campo-erro" id="lf-forma-erro" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
@@ -264,6 +305,38 @@ try {
     <button class="btn-p" id="lf-salvar" type="button">Salvar</button>
   </footer>
 </section>
+<!-- Guardar, Tirar, Passar entre caixinhas e Conferir saldo: tela cheia (#reserva/guardar, #reserva/tirar, #reserva/passar, #conferir). Os campos são desenhados por js/tela-movimento.js. -->
+<section class="form" id="mv" aria-labelledby="mv-t" hidden>
+  <header class="form-topo">
+    <button class="btn-icone" id="mv-x" type="button" aria-label="Descartar e fechar"><svg class="ic" aria-hidden="true"><use href="#i-fechar"/></svg></button>
+    <h1 id="mv-t" tabindex="-1">Guardar na caixinha</h1>
+  </header>
+  <div class="form-corpo">
+    <div id="mv-carregando" aria-busy="true" hidden><span class="esq g"></span><span class="esq g"></span><span class="esq g"></span></div>
+    <div class="cartao" id="mv-naoachei" hidden>
+      <svg class="ic ic-grande" aria-hidden="true"><use href="#i-vazio"/></svg>
+      <p><strong>Não achei este lançamento.</strong></p>
+      <p>Ele pode ter sido apagado.</p>
+      <button class="btn-p" id="mv-voltar" type="button">Voltar</button>
+    </div>
+    <form id="mv-campos" novalidate autocomplete="off" hidden></form>
+  </div>
+  <footer class="form-rodape">
+    <div class="resultado rodape-aviso" id="mv-erro-banco" role="alert"></div>
+    <button class="btn-sec" id="mv-descartar" type="button">Descartar</button>
+    <button class="btn-p" id="mv-salvar" type="button">Salvar</button>
+  </footer>
+</section>
+<div class="folha-fundo" id="mv-folha-fundo" hidden>
+  <div class="folha" role="alertdialog" aria-modal="true" aria-labelledby="mv-folha-t">
+    <h2 id="mv-folha-t" tabindex="-1">Descartar o que você digitou?</h2>
+    <p>Nada será guardado.</p>
+    <div class="botoes">
+      <button class="btn-p" id="mv-continuar" type="button">Continuar editando</button>
+      <button class="btn-sec btn-atencao" id="mv-descartar-sim" type="button">Descartar</button>
+    </div>
+  </div>
+</div>
 <div class="folha-fundo" id="lf-folha-fundo" hidden>
   <div class="folha" role="alertdialog" aria-modal="true" aria-labelledby="lf-folha-t">
     <h2 id="lf-folha-t" tabindex="-1">Descartar o que você digitou?</h2>
@@ -283,6 +356,7 @@ try {
 <script src="js/ponte.js"></script>
 <script src="js/lancamentos.js"></script>
 <script src="js/indicador.js"></script>
+<script src="js/alterado.js"></script>
 <script src="js/somas.js"></script>
 <script src="js/ver.js"></script>
 <script src="js/ajustes.js"></script>
@@ -290,6 +364,9 @@ try {
 <script src="js/opcoes.js"></script>
 <script src="js/lancar.js"></script>
 <script src="js/tela-lancar.js"></script>
+<script src="js/reserva.js"></script>
+<script src="js/tela-movimento.js"></script>
+<script src="js/tela-reserva.js"></script>
 <script src="js/tela-ver.js"></script>
 <script src="js/app.js"></script>
 </body>

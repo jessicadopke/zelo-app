@@ -10,6 +10,8 @@ var Ver = (function () {
   var MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
   // Valor especial dos filtros: "sem categoria" / "sem pessoa". Não é texto, para não colidir com uma categoria de nome igual.
   var SEM = Object.freeze({ sem: true });
+  // Valor especial do filtro "Cartão": só os pagamentos de fatura (de qualquer cartão).
+  var FATURAS = Object.freeze({ faturas: true });
 
   function aparar(v) { return typeof v === "string" ? v.replace(/^\s+|\s+$/g, "") : ""; }
   function plural(n, um, varios) { return n === 1 ? um : varios; }
@@ -26,7 +28,12 @@ var Ver = (function () {
   }
   function filtrar(lista, filtros) {
     var f = filtros || {};
-    return lista.filter(function (l) { return casa(f.categoria, l.categoria) && casa(f.pessoa, l.pessoa); });
+    return lista.filter(function (l) { return casa(f.categoria, l.categoria) && casa(f.pessoa, l.pessoa) && casaCartao(f.cartao, l); });
+  }
+  // Cartão: SEM = fora do cartão; FATURAS = só tipo fatura; texto = compras, estornos e pagamentos desse cartão.
+  function casaCartao(valorDoFiltro, l) {
+    if (valorDoFiltro === FATURAS) return l.tipo === "fatura";
+    return casa(valorDoFiltro, l.cartao);
   }
 
   function opcoesDe(lista, campo, rotuloSem) {
@@ -44,6 +51,28 @@ var Ver = (function () {
   }
   function opcoesDeFiltro(lista) {
     return { categorias: opcoesDe(lista, "categoria", "Sem categoria"), pessoas: opcoesDe(lista, "pessoa", "Sem pessoa") };
+  }
+
+  // Opções do filtro "Cartão" (#37, P4): "Fora do cartão", um por cartão e "Só pagamentos de fatura", cada um só com n >= 1.
+  // mostrar: há cartão na Config (cartoesConfig) ou nos lançamentos da lista. Sem cartão nenhum, o filtro nem aparece.
+  function opcoesDeCartao(lista, cartoesConfig) {
+    var por = opcoesDe(lista, "cartao", "Fora do cartão");
+    var ops = por.filter(function (o) { return o.valor !== SEM; });
+    var fora = por.filter(function (o) { return o.valor === SEM; });
+    var faturas = lista.filter(function (l) { return l.tipo === "fatura"; }).length;
+    var todas = fora.concat(ops);
+    if (faturas) todas.push({ valor: FATURAS, rotulo: "Só pagamentos de fatura", quantidade: faturas });
+    var daConfig = Array.isArray(cartoesConfig) && cartoesConfig.length > 0;
+    return { mostrar: daConfig || ops.length > 0, opcoes: todas };
+  }
+  function temFatura(lista) {
+    return lista.some(function (l) { return l && l.tipo === "fatura"; });
+  }
+  // Nota sob os totais de Lançamentos (#39 P5). Só fatura: o texto antigo; qualquer guardou/tirou/saldo: o texto único; senão "".
+  function notaDeMovimentos(lista) {
+    var outros = lista.some(function (l) { return l && (l.tipo === "guardou" || l.tipo === "tirou" || l.tipo === "saldo"); });
+    if (outros) return "Fatura, guardar, tirar e saldo conferido aparecem na lista, mas não contam como gasto nem como renda.";
+    return temFatura(lista) ? "Pagamento de fatura aparece na lista, mas não conta como gasto." : "";
   }
 
   // ---- totais: toda conta de dinheiro é do Somas ----
@@ -83,7 +112,10 @@ var Ver = (function () {
   }
 
   // ---- uma linha da lista (sem HTML) ----
+  // Palavra de cada tipo (nunca "Entrou"/"Saiu" para movimentos). Tipo desconhecido segue como "Saiu", como antes.
+  var PALAVRAS = { entrou: "Entrou", saiu: "Saiu", fatura: "Fatura", guardou: "Guardou", tirou: "Tirou", saldo: "Saldo conferido" };
   function linha(l) {
+    var movimento = l.tipo === "fatura" || l.tipo === "guardou" || l.tipo === "tirou" || l.tipo === "saldo";
     var entrou = l.tipo === "entrou";
     var estado = l.situacao === "esperando" ? "esperando" : l.situacao === "nao_enviado" ? "nao_enviado" : "enviado";
     var fav = aparar(l.favorecido), cat = aparar(l.categoria), pes = aparar(l.pessoa);
@@ -92,11 +124,17 @@ var Ver = (function () {
       titulo: fav || "Sem nome",
       categoria: cat || "Sem categoria",
       pessoa: pes || "Sem pessoa",
-      valor: Din.valido(l.valor_centavos) ? Din.formatar(l.valor_centavos) : "—",
-      sinal: entrou ? "+" : MENOS,
-      tipo: entrou ? "entrou" : "saiu",
+      valor: Din.valido(l.valor_centavos) || (l.tipo === "saldo" && l.valor_centavos === 0) ? Din.formatar(l.valor_centavos) : "—",
+      sinal: movimento ? "" : entrou ? "+" : MENOS, // movimento: sinal neutro
+      tipo: movimento ? l.tipo : entrou ? "entrou" : "saiu",
+      palavra: movimento ? PALAVRAS[l.tipo] : entrou ? PALAVRAS.entrou : PALAVRAS.saiu,
       estado: estado,
     };
+    // Onde o dinheiro foi: nome do cartão ou da caixinha (também numa compra no cartão).
+    var lugar = aparar(l.cartao) || aparar(l.caixinha);
+    if (lugar) o.lugar = lugar;
+    if (aparar(l.cartao)) o.cartao = aparar(l.cartao);
+    if (movimento) o.categoria = lugar || o.categoria;
     if (estado === "nao_enviado") o.motivo = typeof l.motivo_recusa === "string" ? l.motivo_recusa : "";
     return o;
   }
@@ -186,8 +224,35 @@ var Ver = (function () {
     return { tipo: "mes", titulo: "Nenhum lançamento em " + nome, apoio: "Quando você anotar um gasto ou uma entrada deste mês, ele aparece aqui.", icone: "i-vazio", status: true, acao: "novo" };
   }
 
+  // ---- bloco "Cartões" (Início e Resumo, #37 P4): em aberto de cada cartão até uma data ----
+  // Os nomes vêm dos lançamentos e da Config (cartão da Config sem lançamento vale R$ 0,00). Só cartão da Config tem botão "Paguei a fatura".
+  // Palavra e valor sem sinal: o sentido está na palavra (Em aberto, Nada em aberto, Pago a mais); nunca "Saiu".
+  function estadoDoAberto(centavos) {
+    if (centavos > 0) return { tipo: "aberto", palavra: "Em aberto", valor: Din.formatar(centavos) };
+    if (centavos === 0) return { tipo: "zerado", palavra: "Nada em aberto", valor: Din.formatar(0) };
+    return { tipo: "pago_a_mais", palavra: "Pago a mais", valor: Din.formatar(-centavos), frase: "Você pagou " + Din.formatar(-centavos) + " além das compras lançadas." };
+  }
+  function cartoes(lancamentos, ate, cartoesConfig) {
+    var s = Som.saldos(lancamentos, ate);
+    var config = Array.isArray(cartoesConfig) ? cartoesConfig : [];
+    var porNome = Object.create(null), nomes = [];
+    s.cartoes.forEach(function (c) { porNome[c.cartao] = c.em_aberto; nomes.push(c.cartao); });
+    config.forEach(function (n) { if (porNome[n] === undefined) { porNome[n] = 0; nomes.push(n); } });
+    nomes.sort(function (a, b) { return a.localeCompare(b, "pt-BR") || (a < b ? -1 : a > b ? 1 : 0); });
+    var linhas = nomes.map(function (n) {
+      var e = estadoDoAberto(porNome[n]);
+      e.cartao = n;
+      e.em_aberto = porNome[n];
+      e.botao = e.tipo === "aberto" && config.indexOf(n) >= 0;
+      return e;
+    });
+    var total = null;
+    if (linhas.length >= 2) { total = estadoDoAberto(s.em_aberto); total.em_aberto = s.em_aberto; }
+    return { linhas: linhas, total: total };
+  }
+
   return {
-    SEM: SEM, TAMANHO: TAMANHO, filtrar: filtrar, opcoesDeFiltro: opcoesDeFiltro, totais: totais, paginar: paginar, maisUm: maisUm,
+    reais: formatar, FATURAS: FATURAS, opcoesDeCartao: opcoesDeCartao, temFatura: temFatura, notaDeMovimentos: notaDeMovimentos, cartoes: cartoes, SEM: SEM, TAMANHO: TAMANHO, filtrar: filtrar, opcoesDeFiltro: opcoesDeFiltro, totais: totais, paginar: paginar, maisUm: maisUm,
     dinheiro: dinheiro, saldo: saldo, linha: linha, porDia: porDia, mesesDisponiveis: mesesDisponiveis, vizinho: vizinho, nomeDoMes: nomeDoMes,
     contagem: contagem, mostrando: mostrando, maisRotulo: maisRotulo, pendentes: pendentes, atualizadoEm: atualizadoEm, vazio: vazio,
   };

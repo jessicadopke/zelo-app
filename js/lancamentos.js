@@ -7,6 +7,10 @@ var Lancamentos = (function () {
   function criar(db, dados, relogio) {
     return Fil.criar(db, dados, relogio);
   }
+  // Vários de uma vez numa transação só (passar entre caixinhas): ou todos ou nenhum.
+  function criarVarios(db, lista, relogio) {
+    return Fil.criarVarios(db, lista, relogio);
+  }
   function editar(db, id, mudancas, relogio) {
     return Fil.editar(db, id, mudancas, relogio);
   }
@@ -49,6 +53,22 @@ var Lancamentos = (function () {
     });
   }
 
+  // Apaga/desfaz as duas metades de uma passagem entre caixinhas numa transação só. Ids que já estão no estado pedido não mudam.
+  function apagarVarios(db, ids) {
+    return Promise.all(ids.map(function (id) { return db.lancamentos.obter(id); })).then(function (atuais) {
+      atuais.forEach(function (a) { if (!a) throw naoEncontrado(); });
+      var lista = ids.filter(function (id, i) { return atuais[i].apagado !== "sim"; }).map(function (id) { return { id: id, mudancas: { apagado: "sim" } }; });
+      return lista.length ? Fil.editarVarios(db, lista) : atuais;
+    });
+  }
+  function desfazerApagarVarios(db, ids) {
+    return Promise.all(ids.map(function (id) { return db.lancamentos.obter(id); })).then(function (atuais) {
+      atuais.forEach(function (a) { if (!a) throw naoEncontrado(); });
+      var lista = ids.filter(function (id, i) { return atuais[i].apagado === "sim"; }).map(function (id) { return { id: id, mudancas: { apagado: "" } }; });
+      return lista.length ? Fil.editarVarios(db, lista) : atuais;
+    });
+  }
+
   function listar(db, mes) {
     return db.lancamentos.doMes(mes).then(visiveis);
   }
@@ -56,6 +76,6 @@ var Lancamentos = (function () {
     return db.lancamentos.todos().then(visiveis);
   }
 
-  return { criar: criar, editar: editar, apagar: apagar, desfazerApagar: desfazerApagar, listar: listar, todosVisiveis: todosVisiveis, ordenar: ordenar };
+  return { criar: criar, criarVarios: criarVarios, editar: editar, apagar: apagar, desfazerApagar: desfazerApagar, apagarVarios: apagarVarios, desfazerApagarVarios: desfazerApagarVarios, listar: listar, todosVisiveis: todosVisiveis, ordenar: ordenar };
 })();
 if (typeof module !== "undefined") module.exports = Lancamentos;

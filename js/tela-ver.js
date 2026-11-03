@@ -7,6 +7,8 @@ var TelaVer = (function () {
   var Som = typeof Somas !== "undefined" ? Somas : require("./somas.js");
   var Dat = typeof Datas !== "undefined" ? Datas : require("./datas.js");
   var Fil = typeof Fila !== "undefined" ? Fila : require("./fila.js");
+  var Opc = typeof Opcoes !== "undefined" ? Opcoes : require("./opcoes.js");
+  var Res = typeof Reserva !== "undefined" ? Reserva : require("./reserva.js");
 
   var SVG_NS = "http://www.w3.org/2000/svg";
   var CINCO_MIN = 5 * 60 * 1000;
@@ -14,9 +16,11 @@ var TelaVer = (function () {
   var AVISOS = ["criou", "editou", "recebeu", "terminou", "falhou", "alterado_no_outro"];
   var ABAS = ["inicio", "lancamentos", "resumo"];
   var SEM_VALOR = "__sem__";
+  var FATURAS_VALOR = "__fatura__";
+  var SEM_FILTRO = { categoria: undefined, pessoa: undefined, cartao: undefined };
 
   // env: { pronto: Promise<{ db, controle } | null>, hoje(), online(), agora(), agendar(fn, ms), cancelar(t), doc,
-  //        ir(aba), novo(), editar(id) }
+  //        ir(aba), novo(), editar(id), pagarFatura(cartao), reserva(), conferir(lugar), marcas (opcional: Alterado.criarMarcas(), a marca "alterado no outro celular") }
   function criar(env) {
     var doc = env.doc || document;
     var agora = env.agora || function () { return new Date().getTime(); };
@@ -27,7 +31,7 @@ var TelaVer = (function () {
     var ctx = null;                 // { db, controle } quando o banco abriu
     var atual = null;               // aba à vista
     var mes = null;                 // mês escolhido (Lançamentos e Resumo); só em memória
-    var filtro = { categoria: undefined, pessoa: undefined };
+    var filtro = { categoria: undefined, pessoa: undefined, cartao: undefined };
     var ate = Ver_.TAMANHO, painel = false;
     var versao = 0;                 // sobe a cada aviso da fila: dado mais velho que isto está velho
     var dadosMes = null, dadosIni = null, contador = 0, geracao = 0;
@@ -40,6 +44,7 @@ var TelaVer = (function () {
     var abertoEm = agora();         // o app acabou de abrir: a sincronização de abertura conta como tentativa
     var lanRef = null;              // o que "Mostrar mais" acrescenta sem redesenhar
     var desligar = [];
+    var marcas = env.marcas || null; // só em memória (#16, parte F)
 
     // ---- ajudas de desenho ----
     function el(tag, classe, texto) {
@@ -94,14 +99,25 @@ var TelaVer = (function () {
       d.append(i, el("dt", "din-p", ROTULO[tipo]), el("dd", "din-v", Ver_.dinheiro(tipo, centavos)));
       return d;
     }
-    function dinSaldo(centavos, comIcone) {
+    // Em aberto de um cartão: palavra antes do valor no HTML (o CSS põe o valor em cima). Sem sinal e sem vermelho.
+    function dinAberto(e) {
+      var s = el("span", "din");
+      s.setAttribute("data-tipo", "aberto");
+      var p = el("span", "din-p");
+      if (e.tipo === "zerado") p.appendChild(ic("i-ok", "ic-ok"));
+      if (e.tipo === "pago_a_mais") p.appendChild(ic("i-info", "ic-info"));
+      p.append(e.palavra);
+      s.append(p, el("b", "din-v", e.valor));
+      return s;
+    }
+    function dinSaldo(centavos, comIcone, rotulo) {
       var s = Ver_.saldo(centavos);
       var d = el("div", "din--linha din--saldo");
       d.setAttribute("data-sinal", s.sinal);
       var p = el("dd", "din-p");
       if (comIcone) p.appendChild(ic(s.sinal === "neg" ? "i-atencao" : "i-ok"));
       p.append(s.palavra);
-      d.append(el("dt", "din-rot", "Saldo"), el("dd", "din-v", s.valor), p);
+      d.append(el("dt", "din-rot", rotulo || "Saldo"), el("dd", "din-v", s.valor), p);
       return d;
     }
     function blocoTotais(t) {
@@ -139,17 +155,22 @@ var TelaVer = (function () {
     // ---- leitura do banco: uma vez por abertura de tela ou mês; filtrar e paginar trabalham em memória ----
     function lerMes(m) {
       var minha = ++geracao, v0 = versao;
-      return Promise.all([Lan.listar(ctx.db, m), Lan.todosVisiveis(ctx.db), lerLigacao()]).then(function (v) {
+      return Promise.all([Lan.listar(ctx.db, m), Lan.todosVisiveis(ctx.db), lerLigacao(), lerOpcoes()]).then(function (v) {
         if (minha !== geracao) return dadosMes; // chegou atrasada: vale a leitura mais nova
-        dadosMes = { id: ++contador, mes: m, versao: v0, lista: v[0], todos: v[1], lig: v[2] };
+        dadosMes = { id: ++contador, mes: m, versao: v0, lista: v[0], todos: v[1], lig: v[2], cartoesConfig: cartoesDe(v[3]) };
         return dadosMes;
       });
     }
+    // Opções da Config (aba de opções, copiada no celular). Sem cópia ou script antigo: null (cartões e caixinhas = listas vazias).
+    function lerOpcoes() {
+      return Opc.ler(ctx.db).catch(function () { return null; });
+    }
+    function cartoesDe(o) { return o && Array.isArray(o.cartoes) ? o.cartoes : []; }
     function lerInicio() {
       var m = Dat.mes(env.hoje());
       var v0 = versao;
-      return Promise.all([Lan.listar(ctx.db, m), lerLigacao()]).then(function (v) {
-        dadosIni = { id: ++contador, mes: m, versao: v0, lista: v[0], lig: v[1] };
+      return Promise.all([Lan.listar(ctx.db, m), lerLigacao(), Lan.todosVisiveis(ctx.db), lerOpcoes()]).then(function (v) {
+        dadosIni = { id: ++contador, mes: m, versao: v0, lista: v[0], lig: v[1], todos: v[2], cartoesConfig: cartoesDe(v[3]), opcoes: v[3] };
         return dadosIni;
       });
     }
@@ -223,7 +244,7 @@ var TelaVer = (function () {
       var alvo = Ver_.vizinho(mes, passo, limites());
       if (!alvo) return;
       mes = alvo;
-      filtro = { categoria: undefined, pessoa: undefined };
+      filtro = { categoria: undefined, pessoa: undefined, cartao: undefined };
       ate = Ver_.TAMANHO;
       painel = false;
       focoPedido = passo < 0 ? "mes-ant" : "mes-seg";
@@ -233,9 +254,28 @@ var TelaVer = (function () {
     }
 
     // ---- Lançamentos ----
+    // Linha do cartão (ícone + nome), depois de categoria e pessoa.
+    function linhaCartao(nome) {
+      var p = el("p", "lan-sub lan-cartao");
+      p.append(ic("i-cartao"), el("span", "", nome));
+      return p;
+    }
+    // Linha do lugar de um movimento: caixinha (com o ícone dela), cartão ou "Conta".
+    function linhaLugar(v) {
+      if (v.cartao) return linhaCartao(v.cartao);
+      if (v.lugar) {
+        var p = el("p", "lan-sub lan-cartao");
+        p.append(ic("i-caixinha"), el("span", "", v.lugar));
+        return p;
+      }
+      return el("p", "lan-sub", "Conta");
+    }
     function linhaDom(l) {
       var v = Ver_.linha(l);
+      var fatura = v.tipo === "fatura";
+      var movimento = v.tipo === "guardou" || v.tipo === "tirou" || v.tipo === "saldo";
       var li = el("li");
+      // Toda linha abre o editor do tipo dela (guardou, tirou e saldo conferido incluídos).
       var a = el("a", "lan");
       a.setAttribute("href", "#editar/" + encodeURIComponent(v.id));
       a.setAttribute("data-tipo", v.tipo);
@@ -243,14 +283,31 @@ var TelaVer = (function () {
       a.addEventListener("click", function (e) { if (e && e.preventDefault) e.preventDefault(); env.editar(v.id); });
       var circulo = el("span", "lan-ic");
       circulo.setAttribute("aria-hidden", "true");
-      circulo.appendChild(ic(v.tipo === "entrou" ? "i-entrou" : "i-saiu"));
+      circulo.appendChild(ic(fatura ? "i-cartao" : v.tipo === "guardou" ? "i-guardar" : v.tipo === "tirou" ? "i-tirar" : v.tipo === "saldo" ? "i-ok" : v.tipo === "entrou" ? "i-entrou" : "i-saiu"));
       var txt = el("div", "lan-txt");
-      txt.append(el("p", "lan-titulo", v.titulo), el("p", "lan-sub lan-cat", v.categoria), el("p", "lan-sub lan-pes", v.pessoa));
+      txt.appendChild(el("p", "lan-titulo", v.titulo));
+      if (movimento) {
+        txt.appendChild(linhaLugar(v));
+      } else if (fatura) {
+        if (v.cartao) txt.appendChild(linhaCartao(v.cartao));
+      } else {
+        txt.append(el("p", "lan-sub lan-cat", v.categoria), el("p", "lan-sub lan-pes", v.pessoa));
+        if (v.cartao) txt.appendChild(linhaCartao(v.cartao));
+      }
       var d = el("span", "din");
       d.setAttribute("data-tipo", v.tipo);
-      d.append(el("span", "din-p", ROTULO[v.tipo]), el("b", "din-v", v.valor === "—" ? "—" : v.sinal + v.valor));
+      d.append(el("span", "din-p", v.palavra), el("b", "din-v", v.valor === "—" ? "—" : v.sinal + v.valor));
       a.append(circulo, txt, d);
-      if (v.estado !== "enviado") {
+      var alterado = v.estado === "enviado" && marcas && marcas.tem(v.id);
+      if (alterado) {
+        // Esperando envio e Não enviado são a verdade mais urgente: só quando já está enviado a marca de alterado aparece.
+        var mo = el("div", "lan-marca");
+        var po = el("span", "marca");
+        po.setAttribute("data-tom", "outro");
+        po.append(ic("i-trocar"), "Alterado no outro celular");
+        mo.appendChild(po);
+        a.appendChild(mo);
+      } else if (v.estado !== "enviado") {
         var m = el("div", "lan-marca");
         var pil = el("span", "marca");
         pil.setAttribute("data-tom", v.estado === "esperando" ? "esperando" : "nao-enviado");
@@ -304,7 +361,7 @@ var TelaVer = (function () {
       if (primeira && primeira.focus) primeira.focus({ preventScroll: true });
     }
     function limparFiltros() {
-      filtro = { categoria: undefined, pessoa: undefined };
+      filtro = { categoria: undefined, pessoa: undefined, cartao: undefined };
       ate = Ver_.TAMANHO;
       anunciar.lancamentos = true;
       focoPedido = "filtros";
@@ -324,6 +381,7 @@ var TelaVer = (function () {
       m.append(t, b);
       return m;
     }
+    function codigo(valor) { return valor === Ver_.SEM ? SEM_VALOR : valor === Ver_.FATURAS ? FATURAS_VALOR : "n:" + valor; }
     function seletorFiltro(id, rotulo, todas, ops, atualValor, definir) {
       var campo = el("div", "campo");
       var lb = el("label", "", rotulo);
@@ -336,13 +394,13 @@ var TelaVer = (function () {
       s.appendChild(o0);
       ops.forEach(function (o) {
         var op = el("option", "", o.rotulo + " (" + o.quantidade + ")");
-        op.value = o.valor === Ver_.SEM ? SEM_VALOR : "n:" + o.valor;
+        op.value = codigo(o.valor);
         s.appendChild(op);
       });
-      s.value = atualValor === undefined ? "" : atualValor === Ver_.SEM ? SEM_VALOR : "n:" + atualValor;
+      s.value = atualValor === undefined ? "" : codigo(atualValor);
       s.addEventListener("change", function () {
         var v = s.value;
-        definir(v === "" ? undefined : v === SEM_VALOR ? Ver_.SEM : v.slice(2));
+        definir(v === "" ? undefined : v === SEM_VALOR ? Ver_.SEM : v === FATURAS_VALOR ? Ver_.FATURAS : v.slice(2));
         ate = Ver_.TAMANHO;
         anunciar.lancamentos = true;
         focoPedido = id;
@@ -350,6 +408,34 @@ var TelaVer = (function () {
       });
       campo.append(lb, s);
       return campo;
+    }
+
+    // Nota no alto: fica enquanto houver lançamentos marcados (só em memória). Entendi limpa todos.
+    function pintarNotaLan() {
+      var alvo = $("lan-nota");
+      if (!alvo) return;
+      var tinhaFoco = !!doc.activeElement && !!doc.activeElement.getAttribute && doc.activeElement.getAttribute("data-foco") === "entendi";
+      alvo.textContent = "";
+      var n = marcas ? marcas.quantidade() : 0;
+      if (!n) return;
+      var noMes = !!dadosMes && dadosMes.lista.some(function (l) { return marcas.tem(l.id); });
+      var caixa = el("div", "res nota-outro");
+      var c = el("div");
+      c.appendChild(el("b", "", n === 1 ? "1 lançamento foi alterado no outro celular" : n + " lançamentos foram alterados no outro celular"));
+      c.appendChild(el("span", "", noMes ? "Os que estão marcados abaixo já mostram o valor mais novo." : "Abra o mês deles para ver o valor mais novo."));
+      var acoes = el("div", "res-acoes");
+      var b = botao("res-acao", "Entendi", function () {
+        marcas.limpar();
+        pintarNotaLan();
+        var h = $("t-lan");
+        if (h && h.focus) h.focus({ preventScroll: true });
+      });
+      b.setAttribute("data-foco", "entendi");
+      acoes.appendChild(b);
+      c.appendChild(acoes);
+      caixa.append(ic("i-trocar"), c);
+      alvo.appendChild(caixa);
+      if (tinhaFoco && b.focus) b.focus({ preventScroll: true }); // um redesenho não tira o foco de quem está no botão
     }
 
     function desenharLan(dir) {
@@ -367,14 +453,15 @@ var TelaVer = (function () {
         raiz.appendChild(cartao(v, limparFiltros));
       } else {
         var ops = Ver_.opcoesDeFiltro(d.lista);
-        var nAtivos = (filtro.categoria !== undefined ? 1 : 0) + (filtro.pessoa !== undefined ? 1 : 0);
+        var cart = Ver_.opcoesDeCartao(d.lista, d.cartoesConfig);
+        var nAtivos = (filtro.categoria !== undefined ? 1 : 0) + (filtro.pessoa !== undefined ? 1 : 0) + (filtro.cartao !== undefined ? 1 : 0);
         var barra = el("div", "filtros-barra");
         var tog = botao("filtros-toggle", "Filtros", function () { painel = !painel; focoPedido = "filtros"; desenharLan(null); });
         tog.setAttribute("aria-expanded", String(painel));
         tog.setAttribute("aria-controls", "filtros-painel");
         tog.setAttribute("data-ativo", nAtivos ? "sim" : "nao");
         tog.setAttribute("data-foco", "filtros");
-        if (nAtivos) tog.appendChild(el("span", "filtros-n", nAtivos === 1 ? "1 ativo" : "2 ativos"));
+        if (nAtivos) tog.appendChild(el("span", "filtros-n", nAtivos === 1 ? "1 ativo" : nAtivos + " ativos"));
         tog.appendChild(ic("i-seta-baixo"));
         barra.appendChild(tog);
         if (nAtivos) barra.appendChild(botao("btn-limpar", "Limpar filtros", limparFiltros));
@@ -385,16 +472,28 @@ var TelaVer = (function () {
         pn.append(
           seletorFiltro("f-cat", "Categoria", "Todas as categorias", ops.categorias, filtro.categoria, function (v) { filtro.categoria = v; }),
           seletorFiltro("f-pes", "Pessoa", "Todas as pessoas", ops.pessoas, filtro.pessoa, function (v) { filtro.pessoa = v; }));
+        if (cart.mostrar) pn.appendChild(seletorFiltro("f-car", "Cartão", "Todos", cart.opcoes, filtro.cartao, function (v) { filtro.cartao = v; }));
         raiz.appendChild(pn);
         if (nAtivos && !painel) {
           var ativos = el("p", "filtros-ativos", "Mostrando só: ");
           var nomeDe = function (valor, sem) { return valor === Ver_.SEM ? sem : valor; };
-          if (filtro.categoria !== undefined) ativos.appendChild(el("b", "", "categoria " + nomeDe(filtro.categoria, "Sem categoria")));
-          if (filtro.categoria !== undefined && filtro.pessoa !== undefined) ativos.append(" e ");
-          if (filtro.pessoa !== undefined) ativos.appendChild(el("b", "", "pessoa " + nomeDe(filtro.pessoa, "Sem pessoa")));
+          var partes = [];
+          if (filtro.categoria !== undefined) partes.push("categoria " + nomeDe(filtro.categoria, "Sem categoria"));
+          if (filtro.pessoa !== undefined) partes.push("pessoa " + nomeDe(filtro.pessoa, "Sem pessoa"));
+          if (filtro.cartao !== undefined) partes.push(filtro.cartao === Ver_.FATURAS ? "pagamentos de fatura" : filtro.cartao === Ver_.SEM ? "fora do cartão" : "cartão " + filtro.cartao);
+          partes.forEach(function (txt, k) {
+            if (k > 0) ativos.append(" e ");
+            ativos.appendChild(el("b", "", txt));
+          });
           raiz.appendChild(ativos);
         }
         raiz.appendChild(blocoTotais(t));
+        var textoNota = Ver_.notaDeMovimentos(f);
+        if (textoNota) {
+          var nf = el("p", "res-nota");
+          nf.append(ic("i-info"), textoNota);
+          raiz.appendChild(nf);
+        }
         raiz.appendChild(meta(contagem));
         if (f.length === 0) {
           raiz.appendChild(cartao(Ver_.vazio(contextoVazio(d, true)), limparFiltros));
@@ -409,8 +508,167 @@ var TelaVer = (function () {
         }
       }
       colocar($("lan-conteudo"), raiz);
+      pintarNotaLan();
       desenhado.lancamentos = d.id + ":" + versao;
       voz("lancamentos", Ver_.nomeDoMes(d.mes) + ", " + contagem);
+    }
+
+    // ---- cartões: em aberto de cada um (Início e Resumo) ----
+    // Nunca desenha "R$ 0,00" falso: sem nada sincronizado e sem lançamentos, o bloco não existe.
+    function dadosDeCartoes(d, ate) {
+      if (!d.lig.sincronizou && d.todos.length === 0) return null;
+      var c = Ver_.cartoes(d.todos, ate, d.cartoesConfig);
+      return c.linhas.length ? c : null;
+    }
+    function nomeDoCartao(nome) {
+      var p = el("p", "cart-nome");
+      p.append(ic("i-cartao"), el("span", "", nome));
+      return p;
+    }
+    function blocoCartoesIni(d) {
+      var c = dadosDeCartoes(d, env.hoje());
+      if (!c) return null;
+      var sec = el("section", "painel cart");
+      var h = el("h2", "", "Cartões"); h.setAttribute("id", "h-cart");
+      sec.setAttribute("aria-labelledby", "h-cart");
+      var apoio = !env.online() ? "Sem internet. Os valores são da última atualização e do que você anotou aqui."
+        : Ver_.pendentes(d.todos).texto ? "Já conta o que está esperando envio."
+          : "O que ainda falta pagar em cada cartão.";
+      sec.append(h, el("p", "apoio", apoio));
+      var ul = el("ul");
+      c.linhas.forEach(function (e, i) {
+        var li = el("li");
+        var linha = el("div", "cart-linha");
+        linha.append(nomeDoCartao(e.cartao), dinAberto(e));
+        if (e.frase) linha.appendChild(el("p", "cart-frase", e.frase));
+        var acoes = el("div", "cart-acoes");
+        if (e.botao) {
+          var b = botao("btn-sec", "Paguei a fatura", function () { if (env.pagarFatura) env.pagarFatura(e.cartao); });
+          b.setAttribute("aria-label", "Paguei a fatura do " + e.cartao);
+          b.setAttribute("data-foco", "pagar:" + i);
+          acoes.appendChild(b);
+        }
+        // "Conferir saldo": só de cartão da Config (o formulário não consegue oferecer os outros). Pago a mais: convite cheio.
+        if (env.conferir && d.cartoesConfig.indexOf(e.cartao) >= 0) {
+          var cheio = e.tipo === "pago_a_mais";
+          var cf = botao(cheio ? "btn-sec" : "btn-link", "", function () { env.conferir({ tipo: "cartao", nome: e.cartao }); });
+          if (!cheio) cf.appendChild(ic("i-ok"));
+          cf.append("Conferir saldo");
+          cf.setAttribute("aria-label", "Conferir saldo do " + e.cartao);
+          cf.setAttribute("data-foco", "conferir-cartao:" + i);
+          acoes.appendChild(cf);
+        }
+        if (acoes.children.length) linha.appendChild(acoes);
+        li.appendChild(linha);
+        ul.appendChild(li);
+      });
+      sec.appendChild(ul);
+      if (c.total) {
+        var tot = el("div", "cart-total");
+        var nome = el("p", "cart-nome"); nome.appendChild(el("span", "", "Total em aberto"));
+        tot.append(nome, dinAberto(c.total));
+        sec.appendChild(tot);
+      }
+      return sec;
+    }
+    // ---- painel "Onde está o dinheiro" (Início, #39 P5): conta, guardado, cartões e patrimônio ----
+    function dinOnde(estado, palavra, valor, comIcone) {
+      var sp = el("span", "din");
+      sp.setAttribute("data-tipo", estado === "negativa" || estado === "negativo" ? "alerta" : "neutro");
+      var p = el("span", "din-p");
+      if (comIcone) p.appendChild(ic("i-atencao", "ic-alerta"));
+      p.append(palavra);
+      sp.append(p, el("b", "din-v", valor));
+      return sp;
+    }
+    function textoOnde(rotulo, sub) {
+      var w = el("div");
+      w.append(el("p", "onde-rot", rotulo), el("p", "onde-sub", sub));
+      return w;
+    }
+    function botaoConferir(cheio, rotuloAria, lugar, chave) {
+      var b = botao(cheio ? "btn-sec" : "btn-link", "", function () { if (env.conferir) env.conferir(lugar); });
+      if (!cheio) b.appendChild(ic("i-ok"));
+      b.append("Conferir saldo");
+      b.setAttribute("aria-label", rotuloAria);
+      b.setAttribute("data-foco", chave);
+      return b;
+    }
+    function blocoOnde(d) {
+      var p = Res.painel(d.todos, d.opcoes, env.hoje(), { sincronizou: d.lig.sincronizou, online: env.online(), esperando: !!Ver_.pendentes(d.todos).texto });
+      if (!p) return null;
+      var sec = el("section", "painel onde");
+      var h = el("h2", "", "Onde está o dinheiro"); h.setAttribute("id", "h-onde");
+      sec.setAttribute("aria-labelledby", "h-onde");
+      sec.append(h, el("p", "apoio", p.apoio));
+      var ul = el("ul");
+      // Conta: sem número até o primeiro saldo conferido (sem ponto de partida a soma não é o saldo do banco).
+      var c = p.conta, li = el("li"), linha = el("div", "onde-linha");
+      linha.appendChild(textoOnde("Conta", c.sub));
+      if (c.conferida) linha.appendChild(dinOnde(c.estado, c.palavra, c.valor, c.estado === "negativa"));
+      if (c.frase) linha.appendChild(el("p", "onde-frase", c.frase));
+      linha.appendChild(botaoConferir(c.botaoCheio, "Conferir saldo da conta", { tipo: "conta", nome: "" }, "conferir-conta"));
+      li.appendChild(linha);
+      ul.appendChild(li);
+      if (p.guardado) {
+        var g = p.guardado, lg = el("li"), a = el("a", "onde-linha");
+        a.setAttribute("href", "#reserva");
+        a.setAttribute("data-foco", "reserva");
+        a.addEventListener("click", function (e) { if (e && e.preventDefault) e.preventDefault(); if (env.reserva) env.reserva(); });
+        a.append(textoOnde("Guardado nas caixinhas", g.sub), dinOnde(g.estado, g.palavra, g.valor, g.estado === "negativo"));
+        a.appendChild(ic("i-seta-dir", "onde-seta"));
+        lg.appendChild(a);
+        ul.appendChild(lg);
+      }
+      if (p.aberto) {
+        var ab = p.aberto, la = el("li"), ca = el("div", "onde-linha");
+        ca.append(textoOnde("Em aberto nos cartões", ab.sub), dinOnde("aberto", ab.palavra, ab.valor, false));
+        la.appendChild(ca);
+        ul.appendChild(la);
+      }
+      var pt = p.patrimonio, lp = el("li", "fim"), cp = el("div", "onde-linha onde-total");
+      cp.appendChild(textoOnde("Patrimônio", pt.sub));
+      if (pt.mostrar) cp.appendChild(dinOnde(pt.estado, pt.palavra, pt.valor, pt.estado === "negativo"));
+      lp.appendChild(cp);
+      ul.appendChild(lp);
+      sec.appendChild(ul);
+      if (p.notaCaixinha) {
+        var n = el("p", "res-nota");
+        n.append(ic("i-info"), p.notaCaixinha);
+        sec.appendChild(n);
+      }
+      return sec;
+    }
+
+    function secaoCartoesRes(d) {
+      var c = dadosDeCartoes(d, Dat.dosDoMes(d.mes).ate);
+      if (!c) return null;
+      var sec = el("section", "res-bloco");
+      var h = el("h2", "", "Cartões"); h.setAttribute("id", "h-cart-res");
+      sec.setAttribute("aria-labelledby", "h-cart-res");
+      sec.append(h, el("p", "apoio", "O que ainda falta pagar em cada cartão no fim de " + Ver_.nomeDoMes(d.mes) + "."));
+      var pago = Som.faturasDoMes(d.lista, d.mes);
+      if (pago > 0) {
+        var n = el("p", "res-nota");
+        n.append(ic("i-info"), "Neste mês você pagou " + Ver_.reais(pago) + " de fatura. Isso não conta como gasto.");
+        sec.appendChild(n);
+      }
+      var ul = el("ul");
+      function linhaRes(nome, e, total) {
+        var li = el("li");
+        var topo = el("div", "rl-topo");
+        var nm = total ? el("p", "rl-nome") : nomeDoCartao(e.cartao);
+        if (total) nm.appendChild(el("strong", "", "Total em aberto")); else nm.className = "rl-nome cart-nome";
+        var vals = el("div", "rl-valores");
+        vals.appendChild(dinAberto(e));
+        topo.append(nm, vals);
+        li.appendChild(topo);
+        ul.appendChild(li);
+      }
+      c.linhas.forEach(function (e) { linhaRes(e.cartao, e, false); });
+      if (c.total) linhaRes("", c.total, true);
+      sec.appendChild(ul);
+      return sec;
     }
 
     // ---- Resumo ----
@@ -452,10 +710,14 @@ var TelaVer = (function () {
       var texto;
       if (d.lista.length === 0) {
         raiz.appendChild(cartao(Ver_.vazio(contextoVazio(d, false)), limparFiltros));
+        var cv = secaoCartoesRes(d);
+        if (cv) raiz.appendChild(cv);
         texto = Ver_.nomeDoMes(d.mes) + ": nenhum lançamento";
       } else {
         var r = Som.resumoDoMes(d.lista, d.mes);
         raiz.appendChild(blocoTotais(r));
+        var cr = secaoCartoesRes(d);
+        if (cr) raiz.appendChild(cr);
         raiz.appendChild(bloco("h-cat", "Para onde foi", "O que entrou e saiu em cada categoria. A barra mostra o que saiu.", r.porCategoria, "categoria", "Sem categoria"));
         raiz.appendChild(bloco("h-pes", "Quem gastou", "O que entrou e saiu por pessoa. A barra mostra o que saiu.", r.porPessoa, "pessoa", "Sem pessoa"));
         if (r.ignorados > 0) {
@@ -483,8 +745,9 @@ var TelaVer = (function () {
       } else {
         var t = Ver_.totais(d.lista, d.mes);
         var dl = el("dl", "painel");
-        dl.append(dinLinha("entrou", t.entrou), dinLinha("saiu", t.saiu), dinSaldo(t.saldo, true));
+        dl.append(dinLinha("entrou", t.entrou), dinLinha("saiu", t.saiu), dinSaldo(t.saldo, true, "Saldo do mês"));
         raiz.appendChild(dl);
+        raiz.appendChild(el("p", "apoio", "Entrou menos saiu neste mês. Não conta fatura nem caixinhas."));
         var p = Ver_.pendentes(d.lista);
         if (p.texto) {
           var a = link("pend", "#lancamentos", "", function () { env.ir("lancamentos"); });
@@ -493,6 +756,10 @@ var TelaVer = (function () {
           raiz.appendChild(a);
         }
       }
+      var onde = blocoOnde(d);
+      if (onde) raiz.appendChild(onde);
+      var cini = blocoCartoesIni(d);
+      if (cini) raiz.appendChild(cini);
       colocar($("ini-conteudo"), raiz);
       desenhado.inicio = d.id + ":" + versao;
     }
@@ -558,6 +825,10 @@ var TelaVer = (function () {
       desligar.forEach(function (f) { f(); });
       desligar = [];
       if (timer !== null) { cancelar(timer); timer = null; }
+    }
+
+    if (marcas && marcas.aoMudar) {
+      desligar.push(marcas.aoMudar(function () { if (atual === "lancamentos" && desenhado.lancamentos !== null) agendarRedesenho(false); }));
     }
 
     env.pronto.then(function (c) {

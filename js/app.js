@@ -1,6 +1,6 @@
 // Zelo: núcleo do app. Navegação por abas, tema e cópia offline. O conteúdo das telas vem nas próximas partes.
 // Depende de js/rotas.js (Rotas) e js/tema.js (Tema), carregados antes no index.html.
-const APP_VERSION = "0.5.0";
+const APP_VERSION = "0.6.0";
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -39,11 +39,14 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
 
   // ---- navegação ----
   let atual = null;
+  let reservaAberta = false; // tela da Reserva (#reserva), que mora dentro do Início
+  let telaReserva = null, telaMov = null; // criadas mais abaixo
   const aoMostrar = []; // funções chamadas com o id da aba que acabou de aparecer
 
   function mostrar(id) {
     const antes = atual;
     atual = id;
+    if (reservaAberta && id !== "inicio") fecharReservaTela();
     const dir = antes ? Rotas.direcao(antes, id) : null;
     $$(".tela").forEach((t) => {
       t.hidden = t.dataset.tela !== id;
@@ -67,7 +70,10 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   }
 
   function ir(id) {
-    if (id === atual) return;
+    if (id === atual) {
+      if (id === "inicio" && reservaAberta) history.back(); // "Início" tocado dentro da Reserva volta ao Início
+      return;
+    }
     history.pushState({ aba: id }, "", "#" + id);
     mostrar(id);
   }
@@ -93,6 +99,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   function atualizarRede() {
     $("#faixa-semnet").hidden = navigator.onLine !== false;
     if (telaVer) telaVer.rede();
+    if (telaReserva) telaReserva.rede();
   }
   window.addEventListener("online", atualizarRede);
   window.addEventListener("offline", atualizarRede);
@@ -204,67 +211,180 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   }
   const pronto = iniciarIndicador();
 
-  // ---- avisos de baixo ("Guardado…", "Lançamento apagado. Desfazer"): um por vez, por cima da área, sem empurrar nada ----
+  // ---- avisos de baixo ("Guardado…", "Lançamento apagado. Desfazer", "alterado no outro celular"): um por vez, por cima da área, sem empurrar nada ----
+  // A ordem e o tempo de cada aviso moram em js/alterado.js (criarAvisos); aqui só o desenho.
   const avisoEl = $("#aviso");
-  let avisoTimer = null, avisoSaida = null;
+  const marcas = Alterado.criarMarcas();
+  let telaLancar = null; // criada mais abaixo
   function esconderAviso() {
-    clearTimeout(avisoTimer);
-    clearTimeout(avisoSaida);
     avisoEl.classList.remove("saindo");
     avisoEl.textContent = "";
   }
-  function mostrarAviso(o) {
-    esconderAviso();
-    const texto = el("span", "", o.texto);
-    avisoEl.append(icone(o.icone || "i-ok"), texto);
-    let botao = null;
+  function pintarAviso(v) {
+    if (v.tipo === "alterado") {
+      // Texto da planilha (nome) entra como textContent, nunca como HTML.
+      const t = v.texto;
+      avisoEl.textContent = "";
+      const txt = el("span", "aviso-txt");
+      txt.appendChild(el("span", "aviso-tit", t.titulo));
+      if (t.nome) {
+        const det = el("span", "aviso-det");
+        det.append(el("span", "av-nome", t.nome));
+        if (t.valor) det.append(el("span", "so-leitor", ", "), el("span", "av-valor", t.valor));
+        txt.appendChild(det);
+      }
+      avisoEl.append(icone("i-trocar"), txt);
+      if (t.ver) {
+        const b = el("button", "aviso-acao", "Ver");
+        b.type = "button";
+        b.setAttribute("aria-label", t.verAria);
+        b.addEventListener("click", () => v.ver());
+        avisoEl.appendChild(b);
+      }
+      return;
+    }
+    const o = v.o;
+    avisoEl.append(icone(o.icone || "i-ok"), el("span", "", o.texto));
     if (o.acao) {
-      botao = el("button", "aviso-acao", o.acao);
+      const botao = el("button", "aviso-acao", o.acao);
       botao.type = "button";
-      botao.addEventListener("click", () => { esconderAviso(); if (o.aoAcao) o.aoAcao(); });
+      botao.addEventListener("click", () => v.clicou());
       avisoEl.appendChild(botao);
     }
-    const sumir = () => {
-      // Não some enquanto o botão de desfazer estiver com o foco.
-      if (botao && document.activeElement === botao) { avisoTimer = setTimeout(sumir, 1000); return; }
-      avisoEl.classList.add("saindo");
-      avisoSaida = setTimeout(esconderAviso, movimentoReduzido() ? 0 : 200);
-    };
-    avisoTimer = setTimeout(sumir, o.duracao || 6000);
+  }
+  const avisos = Alterado.criarAvisos({
+    formularioAberto: () => algumFormAberto(),
+    pintar: pintarAviso,
+    limpar: esconderAviso,
+    saindo: () => avisoEl.classList.add("saindo"),
+    // Não some enquanto um botão do aviso estiver com o foco.
+    focoNoBotao: () => !!document.activeElement && document.activeElement.tagName === "BUTTON" && avisoEl.contains(document.activeElement),
+    reduzido: movimentoReduzido,
+    // "Ver": com um só alterado abre o Editar dele; com vários, vai para Lançamentos (onde estão a nota e as marcas).
+    aoVer: (r) => {
+      if (r.editados.length === 1 && r.apagados.length === 0) abrirTelaLancar({ tipo: "editar", id: r.editados[0].id }, "#editar/" + encodeURIComponent(r.editados[0].id));
+      else ir("lancamentos");
+    },
+  });
+  const mostrarAviso = (o) => avisos.comum(o);
+  // Uma edição daqui perdeu para a mais nova do outro celular (ou o outro celular apagou): marca na lista e aviso, só em memória.
+  if (typeof Fila !== "undefined" && Fila.aoMudar) {
+    Fila.aoMudar((evento, ids) => {
+      if (evento !== "alterado_no_outro" || !Array.isArray(ids)) return;
+      pronto.then((c) => (c ? Alterado.resumir(c.db, ids) : [])).then((itens) => {
+        if (!itens.length) return;
+        itens.forEach((i) => { if (i.apagado) marcas.tirar(i.id); });
+        marcas.marcar(itens.filter((i) => !i.apagado).map((i) => i.id));
+        avisos.chegou(itens);
+      }).catch(() => {});
+    });
   }
 
-  // ---- tela de lançar (Novo e Editar): tela cheia por cima das abas, aberta por #novo e #editar/<id> ----
-  // Cada abertura empilha uma entrada no histórico; o voltar do Android (ou o X) volta à aba de antes sem empilhar de novo.
+  // ---- telas de tela cheia: Novo/Editar (js/tela-lancar.js) e Guardar/Tirar/Passar/Conferir (js/tela-movimento.js) ----
+  // Cada abertura empilha uma entrada no histórico; o voltar do Android (ou o X) volta à tela de antes sem empilhar de novo.
+  // O nome de caixinha ou de cartão que pré-marca um formulário viaja só em memória (nunca no endereço nem no history.state).
   let hashDaTela = "", saindoDeVez = false;
-  const telaLancar = typeof TelaLancar !== "undefined" && typeof Lancar !== "undefined"
-    ? TelaLancar.criar({
-      pronto: pronto,
-      hoje: () => Datas.hoje(),
-      online: () => navigator.onLine !== false,
-      sair: () => { saindoDeVez = true; history.back(); },
-      avisar: mostrarAviso,
-    })
-    : null;
-  function abrirTelaLancar(t, hash) {
-    if (!telaLancar) return;
+  const envForm = {
+    pronto: pronto,
+    marcas: marcas,
+    hoje: () => Datas.hoje(),
+    online: () => navigator.onLine !== false,
+    sair: () => { saindoDeVez = true; history.back(); },
+    avisar: mostrarAviso,
+  };
+  telaLancar = typeof TelaLancar !== "undefined" && typeof Lancar !== "undefined" ? TelaLancar.criar(envForm) : null;
+  telaMov = typeof TelaMovimento !== "undefined" && typeof Reserva !== "undefined" ? TelaMovimento.criar(envForm) : null;
+  function algumFormAberto() { return (!!telaLancar && telaLancar.aberto()) || (!!telaMov && telaMov.aberto()); }
+  function formAtivo() { return telaLancar && telaLancar.aberto() ? telaLancar : telaMov && telaMov.aberto() ? telaMov : null; }
+  function empurrar(hash) {
     hashDaTela = hash;
-    history.pushState({ aba: atual, tela: true }, "", hash);
-    telaLancar.abrir(t);
+    history.pushState({ aba: atual, tela: true, sub: reservaAberta ? "reserva" : null }, "", hash);
   }
+  // Abre o formulário certo para a rota: Novo, Editar (o tipo do lançamento escolhe o editor) ou um dos da Reserva.
+  function abrirPorRota(t, memoria) {
+    if (t.tipo === "novo") { if (telaLancar) telaLancar.abrir(t); return; }
+    if (t.tipo === "editar") {
+      const ao = (l) => {
+        const k = l && l.apagado !== "sim" && typeof TelaMovimento !== "undefined" ? TelaMovimento.tipoDoLancamento(l.tipo) : null;
+        if (k && telaMov) telaMov.abrir({ tipo: k, id: t.id });
+        else if (telaLancar) telaLancar.abrir(t);
+      };
+      pronto.then((c) => (c ? c.db.lancamentos.obter(t.id) : null)).then(ao, () => ao(null));
+      return;
+    }
+    if (telaMov) telaMov.abrir(Object.assign({}, memoria || {}, { tipo: t.tipo }));
+  }
+  function abrirTelaLancar(t, hash, memoria) {
+    if (!telaLancar && !telaMov) return;
+    empurrar(hash);
+    abrirPorRota(t, memoria);
+  }
+  function abrirMovimento(t, hash) { abrirTelaLancar(t, hash, t); }
   $$("[data-novo]").forEach((a) => a.addEventListener("click", (e) => {
     e.preventDefault();
     abrirTelaLancar({ tipo: "novo" }, "#novo");
   }));
+
+  // ---- Reserva: tela dentro do Início (#reserva); a barra de baixo continua com "Início" marcado ----
+  const reservaEl = $("#reserva-tela"), principalEl = $("#ini-principal");
+  function abrirReservaTela() {
+    if (reservaAberta || !reservaEl || !telaReserva) return;
+    reservaAberta = true;
+    principalEl.hidden = true;
+    reservaEl.hidden = false;
+    document.title = "Reserva · Zelo";
+    telaReserva.abrir();
+  }
+  function fecharReservaTela(foco) {
+    if (!reservaAberta) return;
+    reservaAberta = false;
+    reservaEl.hidden = true;
+    principalEl.hidden = false;
+    document.title = Rotas.titulo(atual || "inicio");
+    telaReserva.fechar();
+    if (foco) {
+      const alvo = $('[data-foco="reserva"]');
+      if (alvo && alvo.focus) alvo.focus({ preventScroll: true });
+    }
+  }
+  function abrirReserva() {
+    if (reservaAberta || atual !== "inicio" || !telaReserva) return;
+    history.pushState({ aba: "inicio", sub: "reserva" }, "", "#reserva");
+    abrirReservaTela();
+  }
+  telaReserva = typeof TelaReserva !== "undefined" && typeof Reserva !== "undefined" && reservaEl
+    ? TelaReserva.criar({
+      pronto: pronto,
+      marcas: marcas,
+      hoje: () => Datas.hoje(),
+      online: () => navigator.onLine !== false,
+      agora: () => Date.now(),
+      sair: () => history.back(),
+      // Sem caixinha (ou script antigo): a Reserva não existe; volta ao Início sem deixar entrada no histórico.
+      semReserva: () => { history.replaceState({ aba: "inicio" }, "", "#inicio"); fecharReservaTela(); },
+      guardar: (cx) => abrirMovimento({ tipo: "guardar", caixinha: cx }, "#reserva/guardar"),
+      tirar: (cx) => abrirMovimento({ tipo: "tirar", caixinha: cx }, "#reserva/tirar"),
+      passar: (cx) => abrirMovimento({ tipo: "passar", caixinha: cx }, "#reserva/passar"),
+      conferir: (lugar) => abrirMovimento({ tipo: "conferir", lugar: lugar }, "#conferir"),
+      editar: (id) => abrirTelaLancar({ tipo: "editar", id: id }, "#editar/" + encodeURIComponent(id)),
+    })
+    : null;
+
   // ---- telas de ver: Início, Lançamentos e Resumo (js/tela-ver.js) ----
   if (typeof TelaVer !== "undefined") {
     telaVer = TelaVer.criar({
       pronto: pronto,
+      marcas: marcas,
       hoje: () => Datas.hoje(),
       online: () => navigator.onLine !== false,
       agora: () => Date.now(),
       ir: (id) => ir(id),
       novo: () => abrirTelaLancar({ tipo: "novo" }, "#novo"),
+      // O nome do cartão vai só em memória (nunca na URL): o endereço continua "#novo".
+      pagarFatura: (cartao) => abrirTelaLancar({ tipo: "novo", fatura: cartao }, "#novo"),
       editar: (id) => abrirTelaLancar({ tipo: "editar", id: id }, "#editar/" + encodeURIComponent(id)),
+      reserva: () => abrirReserva(),
+      conferir: (lugar) => abrirMovimento({ tipo: "conferir", lugar: lugar }, "#conferir"),
     });
     aoMostrar.push((id) => telaVer.mostrar(id));
     telaVer.mostrar(atual);
@@ -272,28 +392,34 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     document.addEventListener("visibilitychange", () => { if (!document.hidden) telaVer.voltou(); });
   }
 
-  // Botão voltar do Android: fecha o formulário (perguntando se a pessoa mexeu) ou mostra a aba anterior, sem empilhar de novo.
+  // Botão voltar do Android: fecha o formulário (perguntando se a pessoa mexeu) ou mostra a tela anterior, sem empilhar de novo.
   window.addEventListener("popstate", () => {
     const t = Rotas.telaDoHash(location.hash);
     if (t) {
-      if (telaLancar && !telaLancar.aberto()) { hashDaTela = location.hash; telaLancar.abrir(t); }
+      if (!algumFormAberto()) { hashDaTela = location.hash; abrirPorRota(t); }
       return;
     }
-    if (telaLancar && telaLancar.aberto()) {
-      if (!saindoDeVez && telaLancar.mexeu()) {
-        history.pushState({ aba: atual, tela: true }, "", hashDaTela);
-        telaLancar.pedirSaida();
+    const ativo = formAtivo();
+    if (ativo) {
+      if (!saindoDeVez && ativo.mexeu()) {
+        history.pushState({ aba: atual, tela: true, sub: reservaAberta ? "reserva" : null }, "", hashDaTela);
+        ativo.pedirSaida();
         return;
       }
-      telaLancar.fechar();
+      ativo.fechar();
+      avisos.tentar(); // o que chegou com o formulário aberto entra agora
     }
     saindoDeVez = false;
     const aba = Rotas.abaDoHash(location.hash);
     if (aba !== atual) mostrar(aba);
+    const sub = history.state && history.state.sub === "reserva" ? "reserva" : null;
+    if (sub === "reserva" && atual === "inicio") abrirReservaTela();
+    else if (reservaAberta) fecharReservaTela(true);
   });
-  // Aberto direto por #novo ou #editar/<id> (por exemplo, ao recarregar): a aba fica por baixo.
+  // Aberto direto por #novo, #editar/<id>, #reserva/... ou #conferir (por exemplo, ao recarregar): a aba fica por baixo.
   const telaInicial = Rotas.telaDoHash(hashInicial);
-  if (telaInicial) abrirTelaLancar(telaInicial, hashInicial);
+  if (Rotas.subtelaDoHash(hashInicial)) abrirReserva();
+  else if (telaInicial) abrirTelaLancar(telaInicial, hashInicial);
 
   // ---- Ajustes: ligação com a planilha e sobre o app ----
   // O endereço e o código só vão para o banco do aparelho (e para o corpo do POST, dentro de js/ponte.js).

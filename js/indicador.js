@@ -55,6 +55,20 @@ var Indicador = (function () {
     return textos({ estado: "em-dia" });
   }
 
+  // Aviso "alterado no outro celular" (#16, parte F). Entra: { editados, apagados, nome, valor } (nome e valor só valem com 1 lançamento).
+  // Sai: { titulo, nome, valor, ver, verAria }. "ver" = mostra o botão Ver. Tom calmo: nada de erro, conflito ou perda.
+  function textoAlterado(a) {
+    var ed = Math.max(0, (a && a.editados) | 0), ap = Math.max(0, (a && a.apagados) | 0);
+    var n = ed + ap;
+    if (n === 0) return null;
+    if (n === 1) {
+      return { titulo: "Este lançamento foi " + (ed ? "alterado" : "apagado") + " no outro celular",
+        nome: (a.nome && String(a.nome).trim()) || "Sem nome", valor: a.valor || "", ver: ed === 1, verAria: "Ver lançamento" };
+    }
+    var verbo = ap === 0 ? "alterados" : ed === 0 ? "apagados" : "alterados ou apagados";
+    return { titulo: n + " lançamentos foram " + verbo + " no outro celular", nome: "", valor: "", ver: ed > 0, verAria: "Ver lançamentos" };
+  }
+
   // "2030-01-15T12:30:00.000Z" -> "15/01/2030, 09:30" (hora local do celular); vazio -> "Ainda não enviou".
   function horaLocal(iso) {
     if (typeof iso !== "string" || !iso) return "Ainda não enviou";
@@ -218,6 +232,6 @@ var Indicador = (function () {
     return { iniciar: iniciar, atualizar: atualizar, tentarEnviar: tentarEnviar, aoSincronia: aoSincronia, sincronia: sincronia, parar: parar };
   }
 
-  return { ATRASO_ENVIANDO: ATRASO_ENVIANDO, MINIMO_ENVIANDO: MINIMO_ENVIANDO, textos: textos, horaLocal: horaLocal, criar: criar };
+  return { ATRASO_ENVIANDO: ATRASO_ENVIANDO, MINIMO_ENVIANDO: MINIMO_ENVIANDO, textos: textos, textoAlterado: textoAlterado, horaLocal: horaLocal, criar: criar };
 })();
 if (typeof module !== "undefined") module.exports = Indicador;

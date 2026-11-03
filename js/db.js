@@ -5,7 +5,7 @@ var Db = (function () {
   var NOME = "zelo";
   var VERSAO = 1;
 
-  var CAMPOS_REGISTRO = ["id", "data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "origem", "apagado", "editado_em"];
+  var CAMPOS_REGISTRO = ["id", "data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "origem", "apagado", "editado_em", "cartao", "caixinha"];
   var CAMPOS_LANCAMENTO = CAMPOS_REGISTRO.concat(["atualizado_em", "situacao", "motivo_recusa"]);
   var CAMPOS_FILA = ["seq", "id", "registro", "entrou_em"];
   var CHAVES_CONFIG = ["proximo_desde", "url_ponte", "codigo_aparelho", "ultimo_envio_em"];

@@ -351,6 +351,8 @@ button, a { min-height: 32px; min-width: 32px; }
 .aviso-acao { flex: none; min-height: var(--toque); padding: 0 var(--sp-3); border-radius: var(--r-botao); border: 1.5px solid currentColor; background: transparent; color: inherit; font: inherit; font-size: var(--t-b); font-weight: var(--w-forte); }
 .aviso-acao:active { transform: scale(var(--escala-aperta)); }
 .aviso-acao:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+/* o aviso é escuro nos dois temas: o contorno usa a cor do texto dele (--bg), porque --accent sobre --fg dá só 2:1 */
+.aviso-fixo .aviso-acao:focus-visible { outline-color: var(--bg); }
 
 /* Tela cheia do formulário (fora das quatro abas, sem barra de baixo) */
 .form { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; background: var(--bg); padding-top: env(safe-area-inset-top); animation: form-entra var(--dur-media) var(--ease-entra); }
@@ -568,3 +570,141 @@ button, a { min-height: 32px; min-width: 32px; }
 .rl-barra i { display: block; height: 100%; border-radius: var(--r-pilula); background: var(--accent); }
 .res-nota { display: flex; gap: var(--sp-2); align-items: flex-start; margin: 0 0 var(--sp-3); color: var(--muted); font-size: var(--t-s); line-height: 1.4; }
 .res-nota .ic { width: 18px; height: 18px; margin-top: 1px; }
+
+/* ================= Cartão (#37, P4): Tipo com 3 botões, Como pagou, fatura, bloco Cartões ================= */
+
+/* ---- Tipo com 3 botões: cabem em 360 px; com fonte grande quebram em 2 + 1. Marcado: o visto troca o ícone do tipo ---- */
+.escolhas.tres { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: var(--sp-2); }
+.escolhas.tres .escolha { padding: 0 var(--sp-2); gap: var(--sp-1); }
+.escolhas.tres .escolha:has(input:checked) .ic-tipo { display: none; }
+.escolha .ic-tipo.fatura { color: var(--accent); }
+.escolha .ic-cartao { width: 20px; height: 20px; color: var(--accent); }
+.escolha:has(input:checked) .ic-cartao { color: inherit; }
+
+/* ---- "Como pagou" / "Onde entrou" / "Qual cartão?" ---- */
+.campo-grupo .campo-apoio { margin: 0 0 var(--sp-2); }
+.nota-ic b { color: var(--fg); font-weight: var(--w-forte); white-space: nowrap; }
+.nota-aviso b { color: inherit; }
+
+/* ---- Lançamentos: linha do cartão e fatura (movimento tem cor neutra, nunca "Saiu") ---- */
+.lan-cartao { display: flex; align-items: center; gap: var(--sp-1); }
+.lan-cartao .ic { width: 14px; height: 14px; flex: none; }
+.lan-cartao span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lan[data-tipo="fatura"] .lan-ic .ic { color: var(--accent); }
+.din[data-tipo="fatura"], .din[data-tipo="aberto"], .din[data-tipo="neutro"] { color: var(--fg); }
+
+/* ---- Início e Resumo: bloco "Cartões" ---- */
+.painel.cart { padding-top: var(--sp-4); }
+.cart > h2 { margin: 0 0 var(--sp-1); font-size: var(--t-l); font-weight: var(--w-forte); }
+.cart > .apoio { margin: 0 0 var(--sp-2); }
+.cart > ul { list-style: none; margin: 0; padding: 0; }
+.cart-linha { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-2) var(--sp-3); align-items: start; padding: var(--sp-3) 0; }
+.cart > ul > li + li { border-top: 1px solid var(--line); }
+.cart-nome { display: flex; gap: var(--sp-2); align-items: flex-start; min-width: 0; margin: 0; font-size: var(--t-b); font-weight: var(--w-forte); line-height: 1.3; }
+.cart-nome .ic { width: 24px; height: 24px; flex: none; color: var(--accent); }
+.cart-nome span { min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.cart-linha .din-v { font-size: var(--t-l); line-height: 1.25; }
+.din[data-tipo="aberto"] .din-p .ic { width: 16px; height: 16px; }
+.din[data-tipo="aberto"] .din-p .ic-ok { color: var(--entrada); }
+.din[data-tipo="aberto"] .din-p .ic-info { color: var(--accent); }
+.cart-linha .btn-sec { grid-column: 1 / -1; margin-top: 0; }
+.cart-linha .cart-frase { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: var(--t-s); line-height: 1.4; }
+.cart-total { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-3); align-items: start; margin-top: var(--sp-1); padding-top: var(--sp-3); border-top: 1px solid var(--line-strong); }
+.cart-total .cart-nome { padding-left: 0; }
+.cart .res-nota { margin: 0 0 var(--sp-2); }
+/* no Resumo a seção usa .res-bloco; as linhas reaproveitam .rl-topo, .rl-nome e .din */
+.res-bloco .cart-nome { font-weight: var(--w-forte); }
+/* apoio logo abaixo do painel do mês (Início): "Saldo do mês" */
+.painel + .apoio { margin: 0 var(--sp-1) var(--sp-3); }
+
+/* ---- #16 parte F: "alterado no outro celular" ---- */
+/* marca na linha de Lançamentos (neutra: não é erro, não é espera) */
+.marca[data-tom="outro"] { background: var(--surface); color: var(--fg); border: 1.5px solid var(--line-strong); }
+.marca[data-tom="outro"] .ic { color: var(--accent); }
+/* aviso de baixo em duas linhas (título + nome e valor); o .aviso-fixo continua igual */
+.aviso-fixo .aviso-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.aviso-fixo .aviso-tit { flex: none; font-weight: var(--w-forte); overflow-wrap: anywhere; }
+.aviso-fixo .aviso-det { display: flex; gap: var(--sp-2); min-width: 0; font-weight: var(--w-texto); }
+.aviso-fixo .av-nome { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: inherit; }
+.aviso-fixo .av-valor { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: inherit; }
+/* nota fixa no alto de Lançamentos e do Editar (reaproveita .res) */
+.nota-outro { margin: 0 0 var(--sp-3); }
+.nota-outro:focus { outline: none; }
+.nota-outro .res-acoes { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
+.nota-outro .res-acao { margin-top: 0; }
+.nota-outro .res-acao:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+#t-lan:focus { outline: none; }
+
+/* ================= NOVO NO APP · P5 ================= */
+
+/* ---- Ícones novos: #i-caixinha, #i-guardar, #i-tirar, #i-passar (ver index.html do protótipo) ---- */
+.escolha .ic-caixinha { width: 20px; height: 20px; color: var(--accent); }
+.escolha:has(input:checked) .ic-caixinha { color: inherit; }
+
+/* ---- Movimentos de Reserva e saldo conferido nas listas: cor neutra, nunca "Saiu"/"Entrou" ---- */
+.lan[data-tipo="guardou"] .lan-ic .ic, .lan[data-tipo="tirou"] .lan-ic .ic, .lan[data-tipo="saldo"] .lan-ic .ic { color: var(--accent); }
+.din[data-tipo="guardou"], .din[data-tipo="tirou"], .din[data-tipo="saldo"] { color: var(--fg); }
+.din[data-tipo="alerta"], .din--saldo[data-sinal="alerta"] { color: var(--alerta); }
+.ic-alerta, .painel .din--saldo[data-sinal="alerta"] .din-p .ic { color: var(--alerta); }
+
+/* ---- Botão discreto ("Conferir saldo" quando não é convite): texto com ícone, 48 px de toque ---- */
+.btn-link { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2); min-height: var(--toque); padding: 0 var(--sp-3); border: 0; border-radius: var(--r-botao); background: transparent; color: var(--accent); font: inherit; font-size: var(--t-b); font-weight: var(--w-forte); text-decoration: underline; text-underline-offset: 3px; }
+.btn-link .ic { width: 20px; height: 20px; }
+.btn-link:active { background: var(--accent-soft); }
+.btn-link:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* ---- Início: painel "Onde está o dinheiro" ---- */
+.painel.onde { padding-top: var(--sp-4); }
+.onde > h2 { margin: 0 0 var(--sp-1); font-size: var(--t-l); font-weight: var(--w-forte); }
+.onde > .apoio { margin: 0 0 var(--sp-2); }
+.onde > ul { list-style: none; margin: 0; padding: 0; }
+.onde > ul > li + li { border-top: 1px solid var(--line); }
+.onde-linha { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-1) var(--sp-3); align-items: start; min-height: 64px; padding: var(--sp-3) 0; color: inherit; text-decoration: none; }
+a.onde-linha { grid-template-columns: minmax(0, 1fr) auto 20px; margin: 0 calc(var(--sp-2) * -1); padding: var(--sp-3) var(--sp-2); border-radius: var(--r-campo); }
+a.onde-linha:active { background: var(--accent-soft); }
+a.onde-linha:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+a.onde-linha > .onde-seta { align-self: center; width: 20px; height: 20px; color: var(--accent); }
+.onde-rot { margin: 0; font-size: var(--t-b); font-weight: var(--w-forte); line-height: 1.3; overflow-wrap: break-word; }
+.onde-sub { margin: 2px 0 0; color: var(--muted); font-size: var(--t-s); line-height: 1.4; }
+.onde-linha .din-v { font-size: var(--t-l); line-height: 1.25; }
+.onde-linha .din-p .ic { width: 16px; height: 16px; }
+.onde-linha .btn-sec, .onde-linha .btn-link { grid-column: 1 / -1; }
+.onde-linha .btn-link { justify-self: start; margin-left: calc(var(--sp-3) * -1); margin-top: calc(var(--sp-2) * -1); }
+.onde-frase { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: var(--t-s); line-height: 1.4; }
+.onde > ul > li + li.fim { border-top-color: var(--line-strong); }
+.onde-linha.onde-total { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-1) var(--sp-3); }
+.onde-total > div:first-child { flex: 1 1 9rem; min-width: 0; }
+.onde-total .onde-rot { font-size: var(--t-l); }
+.onde-total .din-v { font-size: var(--t-xl); line-height: 1.15; }
+.painel.onde .res-nota { margin: var(--sp-3) 0 0; }
+
+/* ---- Cartões: "Paguei a fatura" e "Conferir saldo" lado a lado (com fonte grande, um sobre o outro) ---- */
+.cart-acoes { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--sp-2); align-items: center; }
+.cart-acoes .btn-sec, .cart-acoes .btn-link { grid-column: auto; margin: 0; width: 100%; }
+
+/* ---- Tela da Reserva (dentro do Início; mantém a barra de baixo) ---- */
+.reserva-cab { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-2) 0 var(--sp-3) calc(var(--sp-2) * -1); }
+.reserva-cab h1 { margin: 0; }
+.reserva-cab h1:focus { outline: none; }
+.reserva-total { padding-top: var(--sp-2); }
+.reserva-acoes { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--sp-2); margin: 0 0 var(--sp-4); }
+.reserva-acoes .btn-p, .reserva-acoes .btn-sec { margin-top: 0; }
+.reserva-acoes .passar { grid-column: 1 / -1; }
+.reserva-sec { margin: 0 0 var(--sp-4); }
+.reserva-sec > h2 { margin: 0 0 var(--sp-1); font-size: var(--t-l); font-weight: var(--w-forte); }
+.reserva-sec > .apoio { margin: 0 0 var(--sp-3); }
+.reserva-sec .campo-grupo { margin: 0 0 var(--sp-3); }
+.reserva-sec .cartao { margin-top: var(--sp-2); }
+.painel.cx .cart-nome .ic { color: var(--accent); }
+.painel.cx .cart-linha .btn-link { justify-self: start; margin-left: calc(var(--sp-3) * -1); margin-top: calc(var(--sp-2) * -1); grid-column: 1 / -1; }
+.reserva-mais { margin-top: var(--sp-3); }
+
+/* ---- Formulários: nota "Na caixinha Viagem: R$ 250,00", resumo da passagem, resultado da conferência ---- */
+.nota-ok { color: var(--fg); }
+.nota-ok .ic { color: var(--entrada); }
+.campo-grupo + .nota-ic { margin-top: calc(var(--sp-2) * -1); margin-bottom: var(--sp-4); }
+.form-nota.campo-apoio { margin: 0 0 var(--sp-4); }
+.conf-resultado { display: grid; gap: var(--sp-2); margin: 0 0 var(--sp-4); }
+.conf-resultado .nota-ic { margin: 0; }
+.nota-valor { color: var(--fg); font-weight: var(--w-forte); white-space: nowrap; }
+.lan-ajuste, .lan-dentro { white-space: normal; }

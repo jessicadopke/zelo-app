@@ -6,9 +6,15 @@ var TelaLancar = (function () {
   var VAZIO = { categoria: "Sem categoria", pessoa: "Ninguém em especial", forma: "Não informar" };
   var MAX_BOTOES_CATEGORIA = 12;
   // campo da regra -> prefixo dos ids no index.html
-  var ID = { valor: "valor", data: "data", favorecido: "fav", categoria: "cat", pessoa: "pes", forma: "forma" };
+  var ID = { valor: "valor", data: "data", favorecido: "fav", categoria: "cat", pessoa: "pes", forma: "forma", cartao: "lugar" };
+  // Acima disto a lista de cartões vira <select> (como a categoria).
+  var MAX_BOTOES_CARTAO = 12;
+  // Ordem em que o foco procura o primeiro erro, como a tela está desenhada (o Pagar fatura só tem estes campos).
+  var ORDEM = ["tipo", "valor", "data", "favorecido", "categoria", "cartao", "pessoa", "forma"];
+  var ORDEM_FATURA = ["cartao", "valor", "data"];
 
-  // env: { pronto: Promise<{ db, ponte } | null>, hoje(), online(), sair(), avisar({ texto, icone, acao, duracao, aoAcao }) }
+  // env: { pronto: Promise<{ db, ponte } | null>, hoje(), online(), sair(), avisar({ texto, icone, acao, duracao, aoAcao }),
+  //        marcas (opcional: Alterado.criarMarcas(); abrir um lançamento tira a marca dele) }
   function criar(env) {
     var doc = document;
     var $ = function (id) { return doc.getElementById(id); };
@@ -23,7 +29,9 @@ var TelaLancar = (function () {
     var aberto = false, modo = "novo", geracao = 0;
     var sessao = null, ctxDb = null;
     var original = null, inicial = null, opcoes = null, lancamentos = [];
+    var lugar = null, qual = null, lugarPadrao = "", abriuPorFatura = false, listasVazias = false, ultimoAviso = "", ultimoAberto = "";
     var voltarFocoDaFolha = null, salvando = false, ultimaSugestao = "", tocou = {}, desligarFila = null, voltarFoco = null;
+    var outro = null; // nota "trocada por outro celular": { id, passo: "troca" | "visto" | "apagado" | "mantido", atual }
 
     function el(tag, classe, texto) {
       var e = doc.createElement(tag);
@@ -56,10 +64,15 @@ var TelaLancar = (function () {
       return r ? r.value : "";
     }
     function lerCampos() {
-      return {
-        tipo: tipoAtual(), valor: campoValor.value, data: campoData.value, favorecido: campoFav.value,
+      var t = tipoAtual();
+      var c = {
+        tipo: t, valor: campoValor.value, data: campoData.value, favorecido: campoFav.value,
         categoria: categoriaAtual(), pessoa: selPes.value, forma: selForma.value
       };
+      // Fatura usa "Qual cartão?"; saiu e entrou usam "Como pagou" / "Onde entrou". Sem cartão na tela, o campo nem existe.
+      var nome = t === "fatura" ? qual.valor() : lugar.valor();
+      if (nome) c.cartao = nome;
+      return c;
     }
     function contexto() { return { opcoes: opcoes, hoje: env.hoje() }; }
 
@@ -100,20 +113,164 @@ var TelaLancar = (function () {
       var alvo = Array.prototype.filter.call(gCat.querySelectorAll("input"), function (i) { return i.value === valor; })[0];
       if (alvo) alvo.checked = true;
     }
-    function preencherListas(c) {
+    // Grupo de escolha de cartão: botões à vista (ou lista acima de 12). itens: [{ valor, rotulo, cartao, extra }].
+    function criarGrupoCartao(nome, idGrupo, idLinha, idSelect, vazioRotulo) {
+      var g = $(idGrupo), linha = $(idLinha), sel = $(idSelect);
+      var atual = ""; // o escolhido fica em memória: a tela não precisa ler os botões de volta
+      return {
+        preencher: function (itens, marcado) {
+          atual = marcado || "";
+          var usarLista = itens.filter(function (i) { return i.cartao; }).length > MAX_BOTOES_CARTAO;
+          linha.hidden = !usarLista;
+          g.hidden = usarLista;
+          g.textContent = "";
+          sel.textContent = "";
+          if (usarLista) {
+            var o0 = el("option", "", vazioRotulo);
+            o0.value = "";
+            sel.appendChild(o0);
+            itens.forEach(function (i) { if (i.valor === "") return; var o = el("option", "", i.rotulo); o.value = i.valor; sel.appendChild(o); });
+            sel.value = marcado || "";
+            return;
+          }
+          itens.forEach(function (i) {
+            var rotulo = el("label", "escolha");
+            if (i.extra) rotulo.setAttribute("data-extra", "sim");
+            var radio = doc.createElement("input");
+            radio.type = "radio";
+            radio.name = nome;
+            radio.value = i.valor;
+            radio.checked = i.valor === (marcado || "");
+            if (i.cartao) rotulo.appendChild(icone("i-cartao", "ic-cartao"));
+            rotulo.append(radio, el("span", "", i.rotulo), icone("i-ok", "ic-ok"));
+            g.appendChild(rotulo);
+          });
+        },
+        valor: function () { return atual; },
+        // chamado quando a pessoa toca num botão (ou troca a lista)
+        escolheu: function (alvo) { atual = alvo && typeof alvo.value === "string" ? alvo.value : ""; },
+        definir: function (v) {
+          atual = v || "";
+          if (!linha.hidden) { sel.value = v; return; }
+          Array.prototype.forEach.call(g.querySelectorAll("input"), function (i) { i.checked = i.value === v; });
+        },
+        // Trocar de botão tira o botão extra (cartão que a planilha não tem mais), a não ser que ele seja o marcado. Devolve se ainda há extra.
+        tirarExtra: function () {
+          var resta = false;
+          Array.prototype.forEach.call(g.querySelectorAll("[data-extra]"), function (e) {
+            var radio = e.querySelector("input");
+            if (radio && radio.checked) resta = true; else e.remove();
+          });
+          return resta;
+        },
+        elemento: function () { return linha.hidden ? g : sel; },
+        primeiroFocavel: function () { return linha.hidden ? (g.querySelector("input:checked") || g.querySelector("input")) : sel; },
+        eh: function (alvo) { return alvo === sel || !!(alvo && alvo.name === nome); },
+        marcarInvalido: function (sim) {
+          [g, sel].forEach(function (e) { if (sim) e.setAttribute("aria-invalid", "true"); else e.removeAttribute("aria-invalid"); });
+        }
+      };
+    }
+    lugar = criarGrupoCartao("lf-lugar-op", "lf-lugar", "lf-lugar-lista-linha", "lf-lugar-lista", "Conta");
+    qual = criarGrupoCartao("lf-qual-op", "lf-qual", "lf-qual-lista-linha", "lf-qual-lista", "Escolha o cartão");
+    function cartoesDaConfig() { return opcoes && Array.isArray(opcoes.cartoes) ? opcoes.cartoes : []; }
+    function temCartao() { return cartoesDaConfig().length > 0; }
+    // marcados: { lugar, qual } (nome do cartão ou ""). Cartão que a planilha tirou mas o lançamento ainda tem: botão extra.
+    function preencherCartoes(marcados) {
+      var lista = cartoesDaConfig();
+      var itens = lista.map(function (n) { return { valor: n, rotulo: n, cartao: true }; });
+      function extra(nome) { return nome && lista.indexOf(nome) < 0 ? [{ valor: nome, rotulo: nome, cartao: true, extra: true }] : []; }
+      var xl = extra(marcados.lugar), xq = extra(marcados.qual);
+      lugar.preencher([{ valor: "", rotulo: "Conta", cartao: false }].concat(xl, itens), marcados.lugar);
+      qual.preencher(xq.concat(itens), marcados.qual);
+      $("lf-lugar-fora").hidden = xl.length === 0;
+      $("lf-qual-fora").hidden = xq.length === 0;
+    }
+    function preencherListas(c, marcados) {
       preencherCategoria(c.categoria);
       preencherSelect(selPes, VAZIO.pessoa, opcoes && opcoes.pessoas, c.pessoa);
       preencherSelect(selForma, VAZIO.forma, opcoes && opcoes.formas, c.forma);
-      var semListas = !opcoes || (!opcoes.categorias.length && !opcoes.pessoas.length && !opcoes.formas.length);
-      $("lf-listas-nota").hidden = !semListas;
+      listasVazias = !opcoes || (!opcoes.categorias.length && !opcoes.pessoas.length && !opcoes.formas.length);
+      preencherCartoes(marcados);
+    }
+    function marcadosDe(c) {
+      var nome = c.cartao || "";
+      return c.tipo === "fatura" ? { lugar: "", qual: nome } : { lugar: nome, qual: "" };
     }
     function preencher(c) {
       form.querySelectorAll('input[name="lf-tipo"]').forEach(function (r) { r.checked = r.value === c.tipo; });
       campoValor.value = c.valor;
       campoData.value = c.data;
       campoFav.value = c.favorecido;
-      preencherListas(c);
+      preencherListas(c, marcadosDe(c));
+      aplicarTipo();
+    }
+
+    // ---- o que muda com o Tipo e com o cartão escolhido (troca instantânea, sem animação) ----
+    function aplicarTipo() {
+      var t = tipoAtual(), fatura = t === "fatura", entrou = t === "entrou";
+      var editar = modo === "editar";
+      var daFatura = editar && !!original && original.tipo === "fatura";
+      var mostraFatura = temCartao() || daFatura || fatura;
+      $("lf-tipo-fatura").hidden = !mostraFatura;
+      $("lf-tipos").className = "escolhas " + (mostraFatura ? "tres" : "dois");
+      $("lf-tipo-apoio").hidden = !fatura;
+      $("lf-qual-grupo").hidden = !fatura;
+      ["lf-fav-campo", "lf-cat-grupo", "lf-pes-campo"].forEach(function (id) { $(id).hidden = fatura; });
+      var mostraLugar = !fatura && (temCartao() || !!(original && original.cartao));
+      $("lf-lugar-grupo").hidden = !mostraLugar;
+      var noCartao = t === "saiu" && mostraLugar && lugar.valor() !== "";
+      $("lf-forma-campo").hidden = fatura || noCartao;
+      $("lf-forma-auto").hidden = !noCartao;
+      $("lf-lugar-legenda").textContent = entrou ? "Onde entrou" : "Como pagou";
+      $("lf-lugar-apoio").textContent = entrou ? "Escolha um cartão só se foi estorno ou crédito na fatura." : "Escolha um cartão se foi compra no crédito.";
+      $("lf-listas-nota").hidden = fatura || !listasVazias;
+      var tx = Formulario.textosDoTipo(t, editar);
+      titulo.textContent = tx.titulo;
+      $("lf-valor-rotulo").textContent = tx.valor;
+      $("lf-data-rotulo").textContent = tx.data;
+      var rotuloApagar = $("lf-apagar").querySelector("span");
+      if (rotuloApagar) rotuloApagar.textContent = Formulario.textosDoTipo(editar && original ? original.tipo : t, true).apagar;
       pintarRotulos();
+      atualizarFatura();
+    }
+
+    // ---- pagar fatura: linha "Em aberto no…" e aviso do valor (nunca bloqueiam o Salvar) ----
+    function dataParaConta() { return Datas.valida(campoData.value) ? campoData.value : env.hoje(); }
+    function emAbertoDe(cartao) {
+      return Formulario.emAberto(lancamentos, cartao, dataParaConta(), modo === "editar" && original ? original.id : null);
+    }
+    function pintarAviso(texto) {
+      if (texto === ultimoAviso) return; // texto igual não é anunciado de novo a cada tecla
+      ultimoAviso = texto;
+      var p = $("lf-valor-aviso");
+      p.textContent = "";
+      if (texto) p.append(icone("i-atencao"), el("span", "", texto));
+    }
+    function pintarAberto(cartao, aberto) {
+      var p = $("lf-aberto");
+      var chave = cartao ? cartao + "|" + aberto : "";
+      if (chave === ultimoAberto) return;
+      ultimoAberto = chave;
+      p.textContent = "";
+      p.hidden = !cartao;
+      if (!cartao) return;
+      var sp = el("span", "", "Em aberto no " + cartao + ": ");
+      sp.appendChild(el("b", "", Dinheiro.formatar(Math.max(aberto, 0))));
+      p.append(icone("i-info"), sp);
+    }
+    function atualizarFatura() {
+      var cartao = tipoAtual() === "fatura" ? qual.valor() : "";
+      if (!cartao) { pintarAberto("", 0); pintarAviso(""); return; }
+      var aberto = emAbertoDe(cartao);
+      pintarAberto(cartao, aberto);
+      pintarAviso(Formulario.avisoFatura(Dinheiro.paraCentavos(campoValor.value), aberto));
+    }
+    // Enquanto a pessoa não mexeu no valor, ele acompanha o cartão escolhido (o em aberto, se maior que zero).
+    function sugerirValor() {
+      if (tocou.valor || modo !== "novo" || tipoAtual() !== "fatura") return;
+      var cartao = qual.valor();
+      campoValor.value = cartao ? Formulario.valorSugerido(emAbertoDe(cartao)) : "";
     }
     function pintarRotulos() {
       var r = Formulario.rotulos(tipoAtual());
@@ -126,9 +283,23 @@ var TelaLancar = (function () {
     // ---- erros por campo ----
     function elementoDe(campo) {
       if (campo === "categoria") return $("lf-cat-lista-linha").hidden ? gCat : selCat;
+      if (campo === "cartao") return (tipoAtual() === "fatura" ? qual : lugar).elemento();
       return $("lf-" + ID[campo]);
     }
+    // O erro do cartão aparece no grupo que está à vista (Qual cartão? na fatura; Como pagou nos outros).
+    function mostrarErroCartao(msg) {
+      var fatura = tipoAtual() === "fatura";
+      [["qual", qual], ["lugar", lugar]].forEach(function (par) {
+        var ativo = (par[0] === "qual") === fatura;
+        var p = $("lf-" + par[0] + "-erro");
+        var m = ativo ? msg : "";
+        p.querySelector("span").textContent = m || "";
+        p.hidden = !m;
+        par[1].marcarInvalido(!!m);
+      });
+    }
     function mostrarErro(campo, msg) {
+      if (campo === "cartao") { mostrarErroCartao(msg); return; }
       var p = $("lf-" + ID[campo] + "-erro");
       var alvo = elementoDe(campo);
       if (!p || !alvo) return;
@@ -146,6 +317,7 @@ var TelaLancar = (function () {
     function focarCampo(campo) {
       var alvo = elementoDe(campo);
       if (campo === "categoria" && alvo === gCat) alvo = gCat.querySelector("input:checked") || gCat.querySelector("input");
+      if (campo === "cartao") alvo = (tipoAtual() === "fatura" ? qual : lugar).primeiroFocavel();
       if (!alvo) return;
       alvo.focus({ preventScroll: true });
       if (alvo.scrollIntoView) alvo.scrollIntoView({ block: "center", behavior: movimentoReduzido() ? "auto" : "smooth" });
@@ -196,6 +368,74 @@ var TelaLancar = (function () {
       } else pintarNota("", "", "", []);
     }
 
+    // ---- nota "esta edição foi trocada por uma mais nova de outro celular" (#16, parte F) ----
+    // Os campos nunca mudam sozinhos: só quando a pessoa toca "Ver o do outro celular". Só em memória.
+    function pintarNotaOutro() {
+      notaForm.textContent = "";
+      if (!outro || outro.passo === "mantido") return null;
+      var tituloN, apoio, botoes = [];
+      if (outro.passo === "apagado") {
+        tituloN = "Este lançamento foi apagado no outro celular";
+        apoio = "Ele não aparece mais na lista. Se você salvar, ele volta.";
+      } else if (outro.passo === "visto") {
+        tituloN = "Agora você vê o que veio do outro celular";
+        apoio = "Pode fechar sem salvar ou mudar o que quiser.";
+      } else {
+        tituloN = "Esta edição foi trocada por uma mais nova de outro celular";
+        apoio = "O que está nos campos é o que você digitou e ainda não foi salvo. Se você salvar, o que digitou passa a valer.";
+        botoes = [{ texto: "Ver o do outro celular", aoTocar: verDoOutro }, { texto: "Manter o que digitei", aoTocar: manterDigitado }];
+      }
+      var caixa = el("div", "res nota-outro");
+      if (outro.passo === "visto") caixa.setAttribute("tabindex", "-1");
+      var c = el("div");
+      c.append(el("b", "", tituloN), el("span", "", apoio));
+      if (botoes.length) {
+        var acoes = el("div", "res-acoes");
+        botoes.forEach(function (b) {
+          var x = el("button", "res-acao", b.texto);
+          x.type = "button";
+          x.addEventListener("click", b.aoTocar);
+          acoes.appendChild(x);
+        });
+        c.appendChild(acoes);
+      }
+      caixa.append(icone("i-trocar"), c);
+      notaForm.appendChild(caixa);
+      return caixa;
+    }
+    function verDoOutro() {
+      if (!outro || !sessao || !aberto) return;
+      var minha = geracao, id = outro.id;
+      sessao.lerAtual(id).then(function (atual) {
+        if (!atual || minha !== geracao || !aberto || !outro) return;
+        if (atual.apagado === "sim") { outro.passo = "apagado"; pintarNotaOutro(); return; }
+        original = atual;
+        preencher(Formulario.deLancamento(atual));
+        inicial = lerCampos();
+        limparErros();
+        outro.passo = "visto";
+        var nota = pintarNotaOutro();
+        if (nota && nota.focus) nota.focus({ preventScroll: true });
+      }).catch(function () {});
+    }
+    function manterDigitado() {
+      if (!outro) return;
+      outro.passo = "mantido";
+      pintarNotaOutro();
+      titulo.focus({ preventScroll: true });
+    }
+    function aoAlterado(ids) {
+      if (!aberto || modo !== "editar" || !original || !sessao || !Array.isArray(ids) || ids.indexOf(original.id) < 0) return;
+      var minha = geracao, id = original.id;
+      outro = { id: id, passo: "troca", atual: null };
+      sessao.lerAtual(id).then(function (atual) {
+        if (!atual || minha !== geracao || !aberto || !outro) { outro = null; return; }
+        outro.atual = atual;
+        outro.passo = atual.apagado === "sim" ? "apagado" : "troca";
+        pintarNotaOutro();
+      }).catch(function () { outro = null; }); // se a leitura falhar, não mostra nada: o aviso é só cortesia
+    }
+
     // ---- sugestões (parte E) ----
     function pintarSugestoes() {
       var nomes = Formulario.favorecidosRecentes(lancamentos, campoFav.value, 4);
@@ -244,6 +484,7 @@ var TelaLancar = (function () {
       mostrarErroBanco("");
       pintarSalvando(false);
       notaForm.textContent = "";
+      outro = null;
       notaCat.textContent = "";
       $("lf-sug").hidden = true;
       $("lf-sug-lista").textContent = "";
@@ -252,6 +493,12 @@ var TelaLancar = (function () {
       form.inert = false;
       tocou = {};
       ultimaSugestao = "";
+      ultimoAviso = "";
+      ultimoAberto = "";
+      lugarPadrao = "";
+      $("lf-valor-aviso").textContent = "";
+      $("lf-aberto").textContent = "";
+      $("lf-aberto").hidden = true;
     }
     function pintarRede() { $("lf-semnet").hidden = env.online() !== false; }
 
@@ -280,12 +527,17 @@ var TelaLancar = (function () {
       opcoes = dados.opcoes;
       lancamentos = dados.lancamentos;
       original = modo === "editar" ? dados.lancamento : null;
+      lugarPadrao = modo === "novo" && dados.campos.tipo !== "fatura" && dados.campos.cartao ? dados.campos.cartao : "";
       preencher(dados.campos);
+      if (modo === "editar") tocou.valor = true; // o valor guardado nunca é trocado sozinho
       inicial = lerCampos();
       if (modo === "editar") {
         $("lf-apagar-bloco").hidden = false;
         notaRecusado();
         Object.keys(dados.erros || {}).forEach(function (c) { mostrarErro(c, dados.erros[c]); });
+        titulo.focus({ preventScroll: true });
+      } else if (abriuPorFatura && dados.campos.tipo === "fatura") {
+        // Aberto pelo "Paguei a fatura" do Início: cartão e valor já vêm certos, então o foco fica no título (teclado fechado).
         titulo.focus({ preventScroll: true });
       } else {
         campoValor.focus({ preventScroll: true });
@@ -298,11 +550,13 @@ var TelaLancar = (function () {
       var minha = ++geracao;
       aberto = true;
       modo = tela.tipo === "editar" ? "editar" : "novo";
+      abriuPorFatura = modo === "novo" && typeof tela.fatura === "string" && tela.fatura !== "";
       if (!voltarFoco) voltarFoco = doc.activeElement;
       titulo.textContent = modo === "editar" ? "Editar lançamento" : "Novo lançamento";
       $("lf-folha-t").textContent = modo === "editar" ? "Descartar o que você mudou?" : "Descartar o que você digitou?";
       reiniciarEstado();
       original = null;
+      if (modo === "editar" && env.marcas && tela.id) env.marcas.tirar(tela.id); // quem abriu a linha já viu a marca
       form.hidden = false;
       if (app) app.inert = true;
       mostrarCarregando(true);
@@ -313,7 +567,7 @@ var TelaLancar = (function () {
       desligarFila = typeof Fila !== "undefined" && Fila.aoMudar ? Fila.aoMudar(aoMudarFila) : null;
       obterSessao().then(function (s) {
         if (!s) throw new Error("sem banco");
-        return modo === "editar" ? s.abrirEdicao(tela.id, env.hoje()) : s.abrirNovo(env.hoje());
+        return modo === "editar" ? s.abrirEdicao(tela.id, env.hoje()) : s.abrirNovo(env.hoje(), abriuPorFatura ? { fatura: tela.fatura } : null);
       }).then(function (dados) {
         if (minha !== geracao || !aberto) return;
         concluirAbertura(dados, modo === "editar" && !dados.achou);
@@ -341,7 +595,8 @@ var TelaLancar = (function () {
         if (!novas || minha !== geracao || !aberto) return;
         opcoes = novas;
         var atual = lerCampos();
-        preencherListas(atual);
+        preencherListas(atual, { lugar: lugar.valor(), qual: qual.valor() });
+        aplicarTipo();
       }).catch(function () {});
     }
 
@@ -386,9 +641,11 @@ var TelaLancar = (function () {
       }
       pintarSalvando(false);
       if (r.erros) {
-        Object.keys(ID).forEach(function (c) { mostrarErro(c, r.erros[c] || ""); });
+        var fatura = tipoAtual() === "fatura";
+        // Na fatura só há Cartão, Valor e Data à vista: erro de campo escondido não aparece nem leva o foco.
+        Object.keys(ID).forEach(function (c) { mostrarErro(c, (!fatura || ORDEM_FATURA.indexOf(c) >= 0) && r.erros[c] || ""); });
         mostrarAvisoData((r.avisos && r.avisos.data) || "");
-        var primeiro = Formulario.primeiroErro(r.erros);
+        var primeiro = (fatura ? ORDEM_FATURA : ORDEM).filter(function (c) { return r.erros[c]; })[0];
         if (primeiro && primeiro !== "tipo") focarCampo(primeiro);
         return;
       }
@@ -399,7 +656,7 @@ var TelaLancar = (function () {
       if (salvando || !sessao || !inicial) return;
       pintarSalvando(true);
       mostrarErroBanco("");
-      aplicarSugestao();
+      if (tipoAtual() !== "fatura") aplicarSugestao();
       var campos = lerCampos();
       var p = modo === "editar" && original
         ? sessao.salvarEdicao(original, campos, contexto())
@@ -428,11 +685,12 @@ var TelaLancar = (function () {
     }
 
     // ---- outro celular mudou o mesmo lançamento enquanto o Editar está aberto ----
-    function aoMudarFila(evento) {
-      if (evento !== "recebeu" || !aberto || modo !== "editar" || !original || !sessao) return;
+    function aoMudarFila(evento, extra) {
+      if (evento === "alterado_no_outro") { aoAlterado(extra); return; }
+      if (evento !== "recebeu" || !aberto || modo !== "editar" || !original || !sessao || outro) return;
       var minha = geracao;
       sessao.versaoMaisNova(original).then(function (atual) {
-        if (!atual || minha !== geracao || !aberto) return;
+        if (!atual || minha !== geracao || !aberto || outro) return;
         pintarNota("info", "i-enviando", "Este lançamento foi alterado no outro celular.", ["O que está na tela não mudou."], {
           texto: "Ver o novo",
           aoTocar: function () { abrirTela({ tipo: "editar", id: original.id }); }
@@ -457,7 +715,9 @@ var TelaLancar = (function () {
 
     form.addEventListener("change", function (e) {
       var t = e.target;
-      if (t.name === "lf-tipo") { pintarRotulos(); return; }
+      if (t.name === "lf-tipo") { aoTrocarTipo(); return; }
+      if (qual.eh(t)) { qual.escolheu(t); $("lf-qual-fora").hidden = !qual.tirarExtra(); mostrarErro("cartao", ""); sugerirValor(); atualizarFatura(); return; }
+      if (lugar.eh(t)) { lugar.escolheu(t); tocou.lugar = true; $("lf-lugar-fora").hidden = !lugar.tirarExtra(); mostrarErro("cartao", ""); aplicarTipo(); return; }
       if (t.name === "lf-categoria" || t === selCat) { tocou.categoria = true; notaCat.textContent = ""; mostrarErro("categoria", ""); }
       if (t === selPes) { tocou.pessoa = true; mostrarErro("pessoa", ""); }
       if (t === selForma) { tocou.forma = true; mostrarErro("forma", ""); }
@@ -465,15 +725,34 @@ var TelaLancar = (function () {
         mostrarErro("data", "");
         var v = Formulario.validar(lerCampos(), contexto());
         mostrarAvisoData((v.avisos && v.avisos.data) || "");
+        atualizarFatura();
       }
     });
-    campoValor.addEventListener("input", function () { mostrarErro("valor", ""); });
+    // Trocar o Tipo não apaga nada do que foi digitado: só muda o que está à vista.
+    function aoTrocarTipo() {
+      var t = tipoAtual();
+      mostrarErro("cartao", "");
+      // Padrão do "Como pagou": o último cartão usado no Saiu; no Entrou, sempre Conta (enquanto a pessoa não escolheu).
+      if (!tocou.lugar && modo === "novo") lugar.definir(t === "saiu" ? lugarPadrao : "");
+      if (t === "fatura") {
+        var unico = cartoesDaConfig();
+        if (!qual.valor() && unico.length === 1) qual.definir(unico[0]);
+        sugerirValor();
+      }
+      aplicarTipo();
+      if (t === "fatura") {
+        // Pelo Tipo, o foco vai ao primeiro campo vazio: o cartão, se ainda não marcado; senão o valor.
+        if (!qual.valor()) { var f = qual.primeiroFocavel(); if (f) f.focus({ preventScroll: true }); }
+        else campoValor.focus({ preventScroll: true });
+      }
+    }
+    campoValor.addEventListener("input", function () { tocou.valor = true; mostrarErro("valor", ""); atualizarFatura(); });
     campoValor.addEventListener("blur", function () {
       var c = typeof Dinheiro !== "undefined" ? Dinheiro.paraCentavos(campoValor.value) : null;
       if (c !== null) campoValor.value = Dinheiro.formatarCampo(c);
     });
     campoValor.addEventListener("keydown", function (e) {
-      if (e.key === "Enter") { e.preventDefault(); campoFav.focus(); }
+      if (e.key === "Enter") { e.preventDefault(); if (tipoAtual() === "fatura") campoValor.blur(); else campoFav.focus(); }
     });
     campoFav.addEventListener("input", function () { mostrarErro("favorecido", ""); pintarSugestoes(); });
     campoFav.addEventListener("keydown", function (e) {
@@ -498,3 +777,4 @@ var TelaLancar = (function () {
 
   return { criar: criar };
 })();
+if (typeof module !== "undefined") module.exports = TelaLancar;

@@ -27,14 +27,23 @@ var Rotas = (function () {
     if (i === j) return null;
     return j > i ? "dir" : "esq";
   }
-  // Telas de tela cheia, fora das abas: "#novo" -> { tipo: "novo" }; "#editar/<id>" -> { tipo: "editar", id }. O resto -> null.
+  // Telas de tela cheia, fora das abas: "#novo" -> { tipo: "novo" }; "#editar/<id>" -> { tipo: "editar", id };
+  // "#reserva/guardar|tirar|passar" e "#conferir" -> { tipo: "guardar" | "tirar" | "passar" | "conferir" }. O resto -> null.
+  // O nome de caixinha ou de cartão nunca vai no endereço: quem abre pelo botão leva isso em memória.
   // O id só pode ter letras, números e traço (o que o app gera); qualquer outra coisa não abre nada.
   function telaDoHash(hash) {
     var h = String(hash || "").replace(/^#/, "");
     if (h === "novo") return { tipo: "novo" };
+    if (h === "conferir") return { tipo: "conferir" };
+    var r = /^reserva\/(guardar|tirar|passar)$/.exec(h);
+    if (r) return { tipo: r[1] };
     var m = /^editar\/([0-9A-Za-z-]{1,64})$/.exec(h);
     return m ? { tipo: "editar", id: m[1] } : null;
   }
-  return { ABAS: ABAS, PADRAO: PADRAO, abaDoHash: abaDoHash, telaDoHash: telaDoHash, rotulo: rotulo, titulo: titulo, direcao: direcao };
+  // Tela dentro do Início (a barra de baixo continua marcando "Início"): "#reserva" -> "reserva". O resto -> null.
+  function subtelaDoHash(hash) {
+    return String(hash || "").replace(/^#/, "") === "reserva" ? "reserva" : null;
+  }
+  return { subtelaDoHash: subtelaDoHash, ABAS: ABAS, PADRAO: PADRAO, abaDoHash: abaDoHash, telaDoHash: telaDoHash, rotulo: rotulo, titulo: titulo, direcao: direcao };
 })();
 if (typeof module !== "undefined") module.exports = Rotas;

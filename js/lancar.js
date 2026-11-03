@@ -15,8 +15,11 @@ var Lancar = (function () {
 
   // Valores que o lançamento já tinha: passam na lista mesmo que a planilha tenha tirado a opção.
   function manterDe(l) {
-    return { categoria: l.categoria || "", pessoa: l.pessoa || "", forma: l.forma || "" };
+    return { categoria: l.categoria || "", pessoa: l.pessoa || "", forma: l.forma || "", cartao: l.cartao || "", caixinha: l.caixinha || "" };
   }
+
+  // Guardar, tirar e saldo conferido não têm editor no P4 (são do P5): para o Editar é como se não existissem.
+  var SEM_EDITOR = ["guardou", "tirou", "saldo"];
 
   // db: banco aberto. opcoes: { relogio } (só para testes).
   function criar(db, opcoes) {
@@ -34,7 +37,8 @@ var Lancar = (function () {
     }
 
     // Abre o Novo: opções do celular, lançamentos para os padrões e as sugestões, e os campos iniciais.
-    function abrirNovo(hoje) {
+    // pedido.fatura = nome do cartão (botão "Paguei a fatura" do Início): abre o pagamento com cartão e valor em aberto.
+    function abrirNovo(hoje, pedido) {
       return Promise.all([Opc.ler(db), Lan.todosVisiveis(db)]).then(function (v) {
         var opcoesDaPlanilha = v[0], lancamentos = v[1];
         var ctx = { opcoes: opcoesDaPlanilha, hoje: hoje };
@@ -42,6 +46,16 @@ var Lancar = (function () {
         var pad = For.padroes(lancamentos, ctx);
         campos.pessoa = pad.pessoa;
         campos.forma = pad.forma;
+        var temCartao = !!(opcoesDaPlanilha && Array.isArray(opcoesDaPlanilha.cartoes) && opcoesDaPlanilha.cartoes.length);
+        var cartaoPedido = pedido && typeof pedido.fatura === "string" ? pedido.fatura : "";
+        if (temCartao && cartaoPedido && opcoesDaPlanilha.cartoes.indexOf(cartaoPedido) >= 0) {
+          campos.tipo = "fatura";
+          campos.cartao = cartaoPedido;
+          campos.valor = For.valorSugerido(For.emAberto(lancamentos, cartaoPedido, hoje));
+        } else if (temCartao) {
+          var ultimo = For.ultimoCartao(lancamentos, opcoesDaPlanilha);
+          if (ultimo) campos.cartao = ultimo;
+        }
         return { opcoes: opcoesDaPlanilha, lancamentos: lancamentos, campos: campos };
       });
     }
@@ -50,7 +64,7 @@ var Lancar = (function () {
     function abrirEdicao(id, hoje) {
       return Promise.all([db.lancamentos.obter(id), Opc.ler(db), Lan.todosVisiveis(db)]).then(function (v) {
         var l = v[0];
-        if (!l || l.apagado === "sim") return { achou: false };
+        if (!l || l.apagado === "sim" || SEM_EDITOR.indexOf(l.tipo) >= 0) return { achou: false };
         var campos = For.deLancamento(l);
         var ctx = { opcoes: v[1], hoje: hoje, manter: manterDe(l) };
         var conferido = For.validar(campos, ctx);
@@ -64,7 +78,8 @@ var Lancar = (function () {
     }
 
     function salvarNovo(campos, ctx) {
-      var r = For.validar(campos, ctx);
+      var p = For.preparar(campos, ctx);
+      var r = For.validar(p.campos, p.ctx);
       if (!r.ok) return Promise.resolve({ ok: false, erros: r.erros, avisos: r.avisos });
       return umPorVez(function () {
         return Lan.criar(db, r.registro, relogio).then(function (l) { return { ok: true, lancamento: l, avisos: r.avisos }; });
@@ -72,15 +87,20 @@ var Lancar = (function () {
     }
 
     // original: o lançamento como estava ao abrir. Sem mudança: não toca no banco (exceto se foi recusado).
+    // Se o outro celular apagou este lançamento enquanto o Editar estava aberto, Salvar traz ele de volta
+    // (apagado: ""): a edição mais nova vale (#16, parte F, decisão 3).
     function salvarEdicao(original, campos, ctx) {
-      var contexto = { opcoes: ctx.opcoes, hoje: ctx.hoje, manter: manterDe(original) };
-      var r = For.validar(campos, contexto);
+      var p = For.preparar(campos, { opcoes: ctx.opcoes, hoje: ctx.hoje, manter: manterDe(original) });
+      var r = For.validar(p.campos, p.ctx);
       if (!r.ok) return Promise.resolve({ ok: false, erros: r.erros, avisos: r.avisos });
       var mudancas = For.diferenca(original, r.registro);
       var recusado = original.situacao === "nao_enviado"; // a ponte recusou: Salvar manda de novo
-      if (Object.keys(mudancas).length === 0 && !recusado) return Promise.resolve({ ok: true, nada: true });
       return umPorVez(function () {
-        return Lan.editar(db, original.id, mudancas, relogio).then(function (l) { return { ok: true, lancamento: l, avisos: r.avisos }; });
+        return db.lancamentos.obter(original.id).then(function (noBanco) {
+          if (noBanco && noBanco.apagado === "sim") mudancas.apagado = "";
+          if (Object.keys(mudancas).length === 0 && !recusado) return { ok: true, nada: true };
+          return Lan.editar(db, original.id, mudancas, relogio).then(function (l) { return { ok: true, lancamento: l, avisos: r.avisos }; });
+        });
       });
     }
 
@@ -98,8 +118,11 @@ var Lancar = (function () {
       });
     }
 
+    // O que está no banco agora (para a nota "alterado no outro celular" do Editar). Id que não existe: null.
+    function lerAtual(id) { return db.lancamentos.obter(id).then(function (l) { return l || null; }); }
+
     return {
-      abrirNovo: abrirNovo, abrirEdicao: abrirEdicao, salvarNovo: salvarNovo, salvarEdicao: salvarEdicao,
+      lerAtual: lerAtual, abrirNovo: abrirNovo, abrirEdicao: abrirEdicao, salvarNovo: salvarNovo, salvarEdicao: salvarEdicao,
       apagar: apagar, desfazerApagar: desfazerApagar, versaoMaisNova: versaoMaisNova
     };
   }

@@ -7,10 +7,14 @@ var Fila = (function () {
 
   var TAMANHO_LOTE = 50;
   // Contrato seção 4: só estes campos vão para a ponte.
-  var CAMPOS = ["id", "data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "origem", "apagado", "editado_em"];
+  var CAMPOS = ["id", "data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "origem", "apagado", "editado_em", "cartao", "caixinha"];
+  // Tipos aceitos (contrato seção 4; issues #37 e #39): os quatro últimos são movimentos, não gasto nem renda.
+  var TIPOS = ["entrou", "saiu", "fatura", "guardou", "tirou", "saldo"];
   // Como o lançamento nasceu (contrato, seção 4). Ao editar a origem é mantida; origem que o app não conhece vira manual.
   var ORIGENS = ["manual", "importacao"];
-  var EDITAVEIS = ["data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "apagado"];
+  var EDITAVEIS = ["data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "apagado", "cartao", "caixinha"];
+  // Campos acrescentados depois do contrato 1: só vão para a ponte se tiverem valor (ou se o guardado tinha, para limpar).
+  var OPCIONAIS_NOVOS = ["cartao", "caixinha"];
 
   // Códigos em que vale tentar de novo mais tarde, sem a Jéssica fazer nada.
   var TENTAR_DEPOIS = ["sem_internet", "tempo_esgotado", "ocupado", "interno"];
@@ -73,17 +77,49 @@ var Fila = (function () {
   // Confere um registro completo contra o contrato (seção 4) e devolve a cópia limpa com os 11 campos.
   function conferir(r) {
     if (!Dat.valida(r.data)) throw invalido("data", "A data não é válida.");
-    if (r.tipo !== "entrou" && r.tipo !== "saiu") throw invalido("tipo", "O tipo precisa ser entrou ou saiu.");
-    if (!Din.valido(r.valor_centavos)) throw invalido("valor_centavos", "O valor precisa ser maior que zero.");
+    if (TIPOS.indexOf(r.tipo) < 0) throw invalido("tipo", "O tipo do lançamento não é aceito.");
+    // Só o saldo conferido aceita zero ("o cartão está zerado nesta data").
+    var zeroOk = r.tipo === "saldo" && r.valor_centavos === 0;
+    if (!zeroOk && !Din.valido(r.valor_centavos)) throw invalido("valor_centavos", "O valor precisa ser maior que zero.");
     if (typeof r.favorecido !== "string") throw invalido("favorecido", "Falta dizer quem recebeu ou pagou.");
     var fav = r.favorecido.trim();
     if (fav.length < 1 || fav.length > 80 || /[\u0000-\u001f\u007f]/.test(fav)) throw invalido("favorecido", "O nome precisa ter de 1 a 80 letras.");
     if (r.apagado !== "" && r.apagado !== "sim") throw invalido("apagado", "Confira o campo apagado.");
-    return {
+    var cartao = textoOpcional(r.cartao, 40, "cartao"), caixinha = textoOpcional(r.caixinha, 40, "caixinha");
+    // Combinações da tabela 4.2 da nota das issues #37 e #39 (as mesmas do script).
+    if (r.tipo === "fatura") {
+      if (!cartao) throw invalido("cartao", "Escolha o cartão.");
+      if (caixinha) throw invalido("caixinha", "Este tipo não usa caixinha.");
+    } else if (r.tipo === "guardou" || r.tipo === "tirou") {
+      if (!caixinha) throw invalido("caixinha", "Escolha a caixinha.");
+      if (cartao) throw invalido("cartao", "Este tipo não usa cartão.");
+    } else if (r.tipo === "saldo") {
+      if (cartao && caixinha) throw invalido("caixinha", "Escolha só o cartão ou só a caixinha.");
+    } else if (caixinha) {
+      throw invalido("caixinha", "Este tipo não usa caixinha.");
+    }
+    var limpo = {
       id: r.id, data: r.data, tipo: r.tipo, valor_centavos: r.valor_centavos, favorecido: fav,
       categoria: textoOpcional(r.categoria, 40, "categoria"), pessoa: textoOpcional(r.pessoa, 40, "pessoa"),
       forma: textoOpcional(r.forma, 30, "forma"), origem: ORIGENS.indexOf(r.origem) >= 0 ? r.origem : "manual", apagado: r.apagado, editado_em: r.editado_em,
     };
+    // Vazio some do registro da fila (script antigo não conhece estes campos); quem limpa um valor guardado repõe o "" (ver editar).
+    if (cartao) limpo.cartao = cartao;
+    if (caixinha) limpo.caixinha = caixinha;
+    return limpo;
+  }
+
+  // O que vai para o banco local: sempre com os dois campos (vazio = "").
+  function paraLocal(registro) {
+    var l = Object.assign({}, registro);
+    OPCIONAIS_NOVOS.forEach(function (c) { if (l[c] === undefined) l[c] = ""; });
+    return l;
+  }
+  // O que vai para a ponte: cartao/caixinha só se o registro da fila os carrega.
+  function paraPonte(registro) {
+    var r = soRegistro(registro);
+    OPCIONAIS_NOVOS.forEach(function (c) { if (registro[c] === undefined) delete r[c]; });
+    return r;
   }
 
   function soRegistro(l) {
@@ -118,10 +154,10 @@ var Fila = (function () {
     try {
       registro = conferir({
         id: id, data: d.data, tipo: d.tipo, valor_centavos: d.valor_centavos, favorecido: d.favorecido,
-        categoria: d.categoria, pessoa: d.pessoa, forma: d.forma, apagado: "", editado_em: Dat.agoraIso(agora),
+        categoria: d.categoria, pessoa: d.pessoa, forma: d.forma, cartao: d.cartao, caixinha: d.caixinha, apagado: "", editado_em: Dat.agoraIso(agora),
       });
     } catch (e) { return Promise.reject(e); }
-    var local = Object.assign({}, registro, { situacao: "esperando" });
+    var local = Object.assign(paraLocal(registro), { situacao: "esperando" });
     return db.transacao(["lancamentos", "fila"], function (o) {
       return o.lancamentos.gravar(local).then(function () {
         return o.fila.acrescentar({ id: id, registro: registro, entrou_em: registro.editado_em });
@@ -129,33 +165,79 @@ var Fila = (function () {
     }).then(function () { avisar("criou"); return local; });
   }
 
+  // Grava vários lançamentos numa transação só (ex.: passar entre caixinhas = tirou + guardou). Todos ou nenhum.
+  function criarVarios(db, lista, relogio) {
+    var agora = (relogio || relogioPadrao)();
+    if (!Array.isArray(lista) || !lista.length) return Promise.reject(invalido("item", "Não há o que gravar."));
+    var registros;
+    try {
+      registros = lista.map(function (d) {
+        d = d || {};
+        return conferir({
+          id: novoId(), data: d.data, tipo: d.tipo, valor_centavos: d.valor_centavos, favorecido: d.favorecido,
+          categoria: d.categoria, pessoa: d.pessoa, forma: d.forma, cartao: d.cartao, caixinha: d.caixinha, apagado: "", editado_em: Dat.agoraIso(agora),
+        });
+      });
+    } catch (e) { return Promise.reject(e); }
+    var locais = registros.map(function (r) { return Object.assign(paraLocal(r), { situacao: "esperando" }); });
+    return db.transacao(["lancamentos", "fila"], function (o) {
+      var p = Promise.resolve();
+      registros.forEach(function (registro, i) {
+        p = p.then(function () { return o.lancamentos.gravar(locais[i]); }).then(function () {
+          return o.fila.acrescentar({ id: registro.id, registro: registro, entrou_em: registro.editado_em });
+        });
+      });
+      return p;
+    }).then(function () { avisar("criou"); return locais; });
+  }
+
+  // Edita um lançamento dentro de uma transação já aberta (o: operações da transação). Devolve o lançamento local novo.
+  function editarDentro(o, id, m, agora) {
+    return o.lancamentos.obter(id).then(function (atual) {
+      if (!atual) throw erro("nao_encontrado", "Não achei este lançamento.");
+      Object.keys(m).forEach(function (k) {
+        if (k !== "id" && EDITAVEIS.indexOf(k) < 0) throw invalido(k, "Este campo não pode ser mudado.");
+      });
+      var novo = soRegistro(atual);
+      EDITAVEIS.forEach(function (k) { if (m[k] !== undefined) novo[k] = m[k]; });
+      // editado_em sempre mais novo que o anterior, mesmo com o relógio igual ou atrasado.
+      var ms = Math.max(agora.getTime(), new Date(atual.editado_em).getTime() + 1);
+      novo.editado_em = Dat.agoraIso(new Date(ms));
+      var registro = conferir(novo);
+      registro.id = id;
+      // Limpar um valor que já existia: manda "" (senão a ponte manteria o guardado).
+      OPCIONAIS_NOVOS.forEach(function (c) { if (registro[c] === undefined && atual[c]) registro[c] = ""; });
+      var local = Object.assign({}, atual, paraLocal(registro), { situacao: "esperando" });
+      delete local.motivo_recusa;
+      return o.lancamentos.gravar(local).then(function () {
+        return o.fila.todas();
+      }).then(function (todas) {
+        var existente = todas.filter(function (e) { return e.id === id; })[0];
+        if (existente) return o.fila.substituir(existente.seq, { id: id, registro: registro, entrou_em: existente.entrou_em });
+        return o.fila.acrescentar({ id: id, registro: registro, entrou_em: registro.editado_em });
+      }).then(function () { return local; });
+    });
+  }
+
   function editar(db, id, mudancas, relogio) {
     var agora = (relogio || relogioPadrao)();
     var m = mudancas || {};
+    return db.transacao(["lancamentos", "fila"], function (o) { return editarDentro(o, id, m, agora); })
+      .then(function (local) { avisar("editou"); return local; });
+  }
+
+  // Edita vários lançamentos numa transação só: todos ou nenhum (ex.: apagar e desfazer as duas metades de uma passagem).
+  // lista: [{ id, mudancas }]. Devolve os lançamentos locais novos, na mesma ordem.
+  function editarVarios(db, lista, relogio) {
+    var agora = (relogio || relogioPadrao)();
+    if (!Array.isArray(lista) || !lista.length) return Promise.reject(invalido("item", "Não há o que gravar."));
     return db.transacao(["lancamentos", "fila"], function (o) {
-      return o.lancamentos.obter(id).then(function (atual) {
-        if (!atual) throw erro("nao_encontrado", "Não achei este lançamento.");
-        Object.keys(m).forEach(function (k) {
-          if (k !== "id" && EDITAVEIS.indexOf(k) < 0) throw invalido(k, "Este campo não pode ser mudado.");
-        });
-        var novo = soRegistro(atual);
-        EDITAVEIS.forEach(function (k) { if (m[k] !== undefined) novo[k] = m[k]; });
-        // editado_em sempre mais novo que o anterior, mesmo com o relógio igual ou atrasado.
-        var ms = Math.max(agora.getTime(), new Date(atual.editado_em).getTime() + 1);
-        novo.editado_em = Dat.agoraIso(new Date(ms));
-        var registro = conferir(novo);
-        registro.id = id;
-        var local = Object.assign({}, atual, registro, { situacao: "esperando" });
-        delete local.motivo_recusa;
-        return o.lancamentos.gravar(local).then(function () {
-          return o.fila.todas();
-        }).then(function (todas) {
-          var existente = todas.filter(function (e) { return e.id === id; })[0];
-          if (existente) return o.fila.substituir(existente.seq, { id: id, registro: registro, entrou_em: existente.entrou_em });
-          return o.fila.acrescentar({ id: id, registro: registro, entrou_em: registro.editado_em });
-        }).then(function () { return local; });
+      var saida = [], p = Promise.resolve();
+      lista.forEach(function (x) {
+        p = p.then(function () { return editarDentro(o, x.id, x.mudancas || {}, agora); }).then(function (l) { saida.push(l); });
       });
-    }).then(function (local) { avisar("editou"); return local; });
+      return p.then(function () { return saida; });
+    }).then(function (locais) { avisar("editou"); return locais; });
   }
 
   // --- envio ---
@@ -193,7 +275,7 @@ var Fila = (function () {
               if (r && !maisNova) {
                 var novo = soRegistro(r);
                 novo.id = entrada.id;
-                var diferente = CAMPOS.some(function (c) { return novo[c] !== entrada.registro[c]; });
+                var diferente = CAMPOS.some(function (c) { return novo[c] !== (entrada.registro[c] === undefined ? "" : entrada.registro[c]); });
                 if (diferente) resumo.alterados_no_outro.push(entrada.id);
                 var trocado = Object.assign({}, novo, { situacao: "" });
                 if (typeof r.atualizado_em === "string") trocado.atualizado_em = r.atualizado_em;
@@ -244,7 +326,7 @@ var Fila = (function () {
         });
         var resp;
         try {
-          resp = await ponte({ itens: lote.map(function (e) { return soRegistro(e.registro); }) });
+          resp = await ponte({ itens: lote.map(function (e) { return paraPonte(e.registro); }) });
         } catch (e) {
           st.ultimaFalha = (e && typeof e.codigo === "string") ? e.codigo : "sem_internet";
           avisar("falhou");
@@ -287,7 +369,8 @@ var Fila = (function () {
   function itemRecebido(it) {
     if (!it || typeof it !== "object" || Array.isArray(it)) return null;
     if (typeof it.id !== "string" || !UUID4.test(it.id)) return null;
-    if (!Dat.valida(it.data) || (it.tipo !== "entrou" && it.tipo !== "saiu") || !Din.valido(it.valor_centavos)) return null;
+    if (!Dat.valida(it.data) || TIPOS.indexOf(it.tipo) < 0) return null;
+    if (!Din.valido(it.valor_centavos) && !(it.tipo === "saldo" && it.valor_centavos === 0)) return null;
     if (typeof it.favorecido !== "string" || typeof it.editado_em !== "string" || !ISO24.test(it.editado_em)) return null;
     if (typeof it.atualizado_em !== "string" || !ISO24.test(it.atualizado_em)) return null;
     var apagado = it.apagado === undefined || it.apagado === null ? "" : it.apagado;
@@ -428,7 +511,7 @@ var Fila = (function () {
   }
 
   return {
-    TAMANHO_LOTE: TAMANHO_LOTE, ORIGENS: ORIGENS, novoId: novoId, criar: criar, editar: editar, enviar: enviar, receber: receber,
+    TAMANHO_LOTE: TAMANHO_LOTE, ORIGENS: ORIGENS, TIPOS: TIPOS, novoId: novoId, criar: criar, criarVarios: criarVarios, editar: editar, editarVarios: editarVarios, enviar: enviar, receber: receber,
     estado: estado, lerEstado: lerEstado, aoMudar: aoMudar, mensagem: mensagem, tentarDeNovo: tentarDeNovo,
   };
 })();

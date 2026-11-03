@@ -5,9 +5,11 @@
 var Formulario = (function () {
   var Din = typeof Dinheiro !== "undefined" ? Dinheiro : require("./dinheiro.js");
   var Dat = typeof Datas !== "undefined" ? Datas : require("./datas.js");
+  var Som = typeof Somas !== "undefined" ? Somas : require("./somas.js");
 
-  var CAMPOS = ["tipo", "valor", "data", "favorecido", "categoria", "pessoa", "forma"];
-  var LIMITE = { favorecido: 80, categoria: 40, pessoa: 40, forma: 30 };
+  var CAMPOS = ["tipo", "valor", "data", "favorecido", "categoria", "pessoa", "forma", "cartao", "caixinha"];
+  var LIMITE = { favorecido: 80, categoria: 40, pessoa: 40, forma: 30, cartao: 40, caixinha: 40 };
+  var TIPOS = ["entrou", "saiu", "fatura", "guardou", "tirou", "saldo"];
 
   var TEXTOS = {
     tipo: "Escolha se entrou ou saiu dinheiro.",
@@ -23,7 +25,16 @@ var Formulario = (function () {
     controle: "O texto não pode ter quebra de linha.",
     formula: "O texto não pode começar com =, +, - ou @.",
     proibido: "Isto parece número de documento, cartão, telefone ou boleto. Tire os números e escreva só o nome.",
-    fora_da_lista: "Escolha uma das opções da lista."
+    fora_da_lista: "Escolha uma das opções da lista.",
+    escolha_cartao: "Escolha o cartão.",
+    escolha_caixinha: "Escolha a caixinha.",
+    sem_cartao: "Este tipo não usa cartão.",
+    sem_caixinha: "Este tipo não usa caixinha.",
+    so_um: "Escolha só o cartão ou só a caixinha.",
+    forma_cartao: "cartão",
+    fatura_maior: "Este valor é maior que o que está em aberto ({v}). Pode salvar se for isso mesmo.",
+    fatura_zero: "Este cartão não tem nada em aberto agora. Confira se as compras foram lançadas. Pode salvar se for isso mesmo.",
+    fatura_negativo: "Este cartão já está pago a mais ({v}). Confira se as compras foram lançadas. Pode salvar se for isso mesmo."
   };
 
   var RE_CONTROLE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
@@ -84,7 +95,7 @@ var Formulario = (function () {
     return { valor: t };
   }
 
-  var PLURAL = { categoria: "categorias", pessoa: "pessoas", forma: "formas" };
+  var PLURAL = { categoria: "categorias", pessoa: "pessoas", forma: "formas", cartao: "cartoes", caixinha: "caixinhas" };
 
   // Opcional: precisa estar na lista da planilha, ou ser o valor que o lançamento já tinha (ctx.manter).
   function conferirOpcao(campo, bruto, ctx) {
@@ -105,9 +116,11 @@ var Formulario = (function () {
     var erros = {}, avisos = {}, reg = {};
 
     var tipo = aparar(c.tipo);
-    if (tipo === "entrou" || tipo === "saiu") reg.tipo = tipo; else erros.tipo = TEXTOS.tipo;
+    if (TIPOS.indexOf(tipo) >= 0) reg.tipo = tipo; else erros.tipo = TEXTOS.tipo;
 
     var v = conferirValor(c.valor);
+    // Só o saldo conferido aceita zero.
+    if (v.erro === TEXTOS.valor_zero && tipo === "saldo") { v = { centavos: 0 }; }
     if (v.erro) erros.valor = v.erro; else reg.valor_centavos = v.centavos;
 
     var d = conferirData(c.data, x.hoje);
@@ -116,10 +129,25 @@ var Formulario = (function () {
     var f = conferirTexto("favorecido", c.favorecido, true);
     if (f.erro) erros.favorecido = f.erro; else reg.favorecido = f.valor;
 
-    ["categoria", "pessoa", "forma"].forEach(function (campo) {
+    ["categoria", "pessoa", "forma", "cartao", "caixinha"].forEach(function (campo) {
       var r = conferirOpcao(campo, c[campo], x);
       if (r.erro) erros[campo] = r.erro; else reg[campo] = r.valor;
     });
+
+    // Combinações da tabela 4.2 (as mesmas do script). Só olha se os dois campos passaram na checagem de forma.
+    if (reg.cartao !== undefined && reg.caixinha !== undefined && reg.tipo) {
+      if (reg.tipo === "fatura") {
+        if (!reg.cartao) erros.cartao = TEXTOS.escolha_cartao;
+        else if (reg.caixinha) erros.caixinha = TEXTOS.sem_caixinha;
+      } else if (reg.tipo === "guardou" || reg.tipo === "tirou") {
+        if (!reg.caixinha) erros.caixinha = TEXTOS.escolha_caixinha;
+        else if (reg.cartao) erros.cartao = TEXTOS.sem_cartao;
+      } else if (reg.tipo === "saldo") {
+        if (reg.cartao && reg.caixinha) erros.caixinha = TEXTOS.so_um;
+      } else if (reg.caixinha) {
+        erros.caixinha = TEXTOS.sem_caixinha;
+      }
+    }
 
     var ok = Object.keys(erros).length === 0;
     var saida = { ok: ok, erros: erros, avisos: avisos };
@@ -128,6 +156,11 @@ var Formulario = (function () {
         tipo: reg.tipo, valor_centavos: reg.valor_centavos, data: reg.data, favorecido: reg.favorecido,
         categoria: reg.categoria, pessoa: reg.pessoa, forma: reg.forma
       };
+      // Cartão e caixinha só entram no registro quando têm valor, ou para limpar o que o lançamento já tinha (ctx.manter).
+      ["cartao", "caixinha"].forEach(function (campo) {
+        var tinha = x.manter && typeof x.manter[campo] === "string" && x.manter[campo] !== "";
+        if (reg[campo] || tinha) saida.registro[campo] = reg[campo] || "";
+      });
     }
     return saida;
   }
@@ -164,17 +197,20 @@ var Formulario = (function () {
   // Lançamento guardado -> textos da tela (valor com vírgula, data AAAA-MM-DD).
   function deLancamento(l) {
     var x = l || {};
-    return {
-      tipo: x.tipo === "entrou" ? "entrou" : "saiu",
+    var saida = {
+      tipo: TIPOS.indexOf(x.tipo) >= 0 ? x.tipo : "saiu",
       valor: typeof x.valor_centavos === "number" && Number.isInteger(x.valor_centavos) ? Din.formatarCampo(x.valor_centavos) : "",
-      data: texto(x.data), favorecido: texto(x.favorecido), categoria: texto(x.categoria), pessoa: texto(x.pessoa), forma: texto(x.forma)
+      data: texto(x.data), favorecido: texto(x.favorecido), categoria: texto(x.categoria), pessoa: texto(x.pessoa), forma: texto(x.forma),
     };
+    if (texto(x.cartao)) saida.cartao = texto(x.cartao);
+    if (texto(x.caixinha)) saida.caixinha = texto(x.caixinha);
+    return saida;
   }
 
   // Só o que mudou entre o lançamento guardado e o registro validado (nomes do registro guardado).
   function diferenca(original, registro) {
     var o = original || {}, r = registro || {}, saida = {};
-    ["tipo", "valor_centavos", "data", "favorecido", "categoria", "pessoa", "forma"].forEach(function (k) {
+    ["tipo", "valor_centavos", "data", "favorecido", "categoria", "pessoa", "forma", "cartao", "caixinha"].forEach(function (k) {
       var antes = k === "valor_centavos" ? o[k] : texto(o[k]);
       if (r[k] !== undefined && r[k] !== antes) saida[k] = r[k];
     });
@@ -184,6 +220,70 @@ var Formulario = (function () {
   // O lançamento aberto foi alterado depois (por outro celular)? Compara editado_em.
   function alteradoDepois(aberto, atual) {
     return !!(aberto && atual && typeof atual.editado_em === "string" && atual.editado_em > aberto.editado_em);
+  }
+
+  // ---- #37 P4: cartão e pagamento de fatura (tudo puro; a tela só desenha) ----
+
+  // Ajusta o que a tela leu antes de validar, sem mexer no que a pessoa digitou na tela:
+  // - fatura: favorecido sozinho ("Fatura <cartão>"); categoria, pessoa e forma ficam vazias (o tipo não usa);
+  // - saiu no cartão: forma "cartão" sozinha (e aceita mesmo que a planilha não tenha essa forma na lista).
+  // Devolve { campos, ctx } novos; os de entrada não mudam.
+  function preparar(campos, ctx) {
+    var c = {};
+    Object.keys(campos || {}).forEach(function (k) { c[k] = campos[k]; });
+    var x = {};
+    Object.keys(ctx || {}).forEach(function (k) { x[k] = ctx[k]; });
+    var cartao = aparar(c.cartao);
+    if (aparar(c.tipo) === "fatura") {
+      c.favorecido = cartao ? "Fatura " + cartao : "Fatura";
+      c.categoria = ""; c.pessoa = ""; c.forma = "";
+    } else if (aparar(c.tipo) === "saiu" && cartao) {
+      c.forma = TEXTOS.forma_cartao;
+      var o = x.opcoes;
+      if (o && Array.isArray(o.formas) && o.formas.indexOf(TEXTOS.forma_cartao) < 0) {
+        var copia = {};
+        Object.keys(o).forEach(function (k) { copia[k] = o[k]; });
+        copia.formas = o.formas.concat([TEXTOS.forma_cartao]);
+        x.opcoes = copia;
+      }
+    }
+    return { campos: c, ctx: x };
+  }
+
+  // Quanto falta pagar no cartão até a data, sem contar o lançamento exceto (o próprio pagamento, no Editar). Centavos (pode ser negativo).
+  function emAberto(lancamentos, cartao, ate, exceto) {
+    var lista = (lancamentos || []).filter(function (l) { return l && (exceto === undefined || exceto === null || l.id !== exceto); });
+    var r = Som.saldos(lista, Dat.valida(ate) ? ate : "2099-12-31");
+    for (var i = 0; i < r.cartoes.length; i++) if (r.cartoes[i].cartao === cartao) return r.cartoes[i].em_aberto;
+    return 0;
+  }
+
+  // Aviso amarelo do valor da fatura (nunca bloqueia). Sem valor válido ou sem aviso: "".
+  function avisoFatura(valorCentavos, aberto) {
+    if (typeof valorCentavos !== "number" || !Number.isInteger(valorCentavos) || valorCentavos <= 0) return "";
+    if (aberto > 0) return valorCentavos > aberto ? TEXTOS.fatura_maior.replace("{v}", Din.formatar(aberto)) : "";
+    if (aberto === 0) return TEXTOS.fatura_zero;
+    return TEXTOS.fatura_negativo.replace("{v}", Din.formatar(-aberto));
+  }
+
+  // Valor que já vem preenchido no Pagar fatura: o em aberto se for maior que zero; senão vazio.
+  function valorSugerido(aberto) {
+    return typeof aberto === "number" && aberto > 0 ? Din.formatarCampo(aberto) : "";
+  }
+
+  // Textos que mudam com o tipo: título, rótulos de valor e data.
+  function textosDoTipo(tipo, editar) {
+    if (tipo === "fatura") {
+      return { titulo: editar ? "Editar pagamento de fatura" : "Pagar fatura", valor: "Valor pago", data: "Data do pagamento", apagar: "Apagar pagamento" };
+    }
+    return { titulo: editar ? "Editar lançamento" : "Novo lançamento", valor: "Valor", data: "Data", apagar: "Apagar lançamento" };
+  }
+
+  // Cartão do último gasto (saiu) lançado, se ainda está na lista da planilha; "" = Conta (também no primeiro uso).
+  function ultimoCartao(lancamentos, opcoes) {
+    var achado = maisRecentesPrimeiro(lancamentos).filter(function (l) { return l.tipo === "saiu"; })[0];
+    var nome = achado ? texto(achado.cartao) : "";
+    return nome && opcoes && Array.isArray(opcoes.cartoes) && opcoes.cartoes.indexOf(nome) >= 0 ? nome : "";
   }
 
   // ---- parte E: padrões e sugestões (funções puras, só leem a lista que recebem) ----
@@ -247,7 +347,8 @@ var Formulario = (function () {
   return {
     CAMPOS: CAMPOS, TEXTOS: TEXTOS, validar: validar, pareceDadoProibido: pareceDadoProibido, primeiroErro: primeiroErro, vazio: vazio, mudou: mudou,
     rotulos: rotulos, deLancamento: deLancamento, diferenca: diferenca, alteradoDepois: alteradoDepois,
-    padroes: padroes, sugerir: sugerir, favorecidosRecentes: favorecidosRecentes
+    padroes: padroes, sugerir: sugerir, favorecidosRecentes: favorecidosRecentes,
+    preparar: preparar, emAberto: emAberto, avisoFatura: avisoFatura, valorSugerido: valorSugerido, textosDoTipo: textosDoTipo, ultimoCartao: ultimoCartao
   };
 })();
 if (typeof module !== "undefined") module.exports = Formulario;
