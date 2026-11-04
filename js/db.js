@@ -8,7 +8,7 @@ var Db = (function () {
   var CAMPOS_REGISTRO = ["id", "data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "origem", "apagado", "editado_em", "cartao", "caixinha"];
   var CAMPOS_LANCAMENTO = CAMPOS_REGISTRO.concat(["atualizado_em", "situacao", "motivo_recusa"]);
   var CAMPOS_FILA = ["seq", "id", "registro", "entrou_em"];
-  var CHAVES_CONFIG = ["proximo_desde", "url_ponte", "codigo_aparelho", "ultimo_envio_em"];
+  var CHAVES_CONFIG = ["proximo_desde", "url_ponte", "codigo_aparelho", "ultimo_envio_em", "ia_gasto_centavos", "ia_teto_centavos", "ia_mes"];
 
   var MENSAGENS = {
     sem_espaco: "Não consegui guardar no celular. Falta espaço.",

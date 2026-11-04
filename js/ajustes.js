@@ -2,6 +2,7 @@
 // Sem DOM e sem armazenamento próprio: quem desenha é js/app.js. O endereço e o código só passam por aqui para o banco
 // do aparelho (db.config) e nunca entram em mensagem, console ou URL. No navegador vira o objeto global Ajustes.
 var Ajustes = (function () {
+  var Din = typeof Dinheiro !== "undefined" ? Dinheiro : require("./dinheiro.js");
   var TEXTOS = {
     url_vazio: "Cole o endereço da ponte.",
     url_sem_https: "O endereço precisa começar com https://.",
@@ -91,10 +92,107 @@ var Ajustes = (function () {
     }
     return Promise.resolve().then(function () { return ponte.chamar("estado", {}); }).then(function (resp) {
       var resultado = textoDoResultado(resp);
-      return { conferido: resultado.tom === "ok", resultado: resultado };
+      var r = resp && typeof resp === "object" ? resp : {};
+      var ia = r.ok === true && r.dados && typeof r.dados === "object" ? usoValido(r.dados.ia) : null;
+      var semInternet = r.ok !== true && !!r.erro && r.erro.codigo === "sem_internet";
+      return { conferido: resultado.tom === "ok", resultado: resultado, uso: ia, semInternet: semInternet };
     }).catch(function () {
       return { conferido: false, resultado: textoDoResultado({ ok: false, local: true, erro: { codigo: "resposta_estranha" } }) };
     });
+  }
+
+  // ---- Gasto do mês (#97): o app só mostra o que o script contou; não soma, não corta ----
+  var MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  var USO = {
+    titulo: "Gasto do mês",
+    vazio_titulo: "Sem informação ainda",
+    vazio_apoio: "Toque em “Testar ligação” para ver o gasto do mês.",
+    perto: "Perto do limite",
+    perto_apoio: "Falta pouco para o limite deste mês.",
+    atingido: "Limite atingido",
+    atingido_apoio: "A IA volta no começo do próximo mês.",
+    sem_internet: "Sem internet. Este é o último valor que o app recebeu.",
+    nota: "O limite é combinado em família e fica no script; o app só mostra.",
+  };
+  var CHAVES_USO = { gasto: "ia_gasto_centavos", teto: "ia_teto_centavos", mes: "ia_mes" };
+
+  function inteiroDe0(n) {
+    return typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= Din.MAXIMO;
+  }
+
+  // dados.ia da ponte -> { gasto_centavos, teto_centavos, mes } ou null (ausente, texto, negativo, teto 0, mês ruim).
+  function usoValido(ia) {
+    if (!ia || typeof ia !== "object" || Array.isArray(ia)) return null;
+    var g = ia.gasto_centavos, t = ia.teto_centavos, m = ia.mes;
+    if (!inteiroDe0(g) || !inteiroDe0(t) || t < 1) return null;
+    if (typeof m !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(m)) return null;
+    return { gasto_centavos: g, teto_centavos: t, mes: m };
+  }
+
+  function mesDeHoje(hoje) {
+    var d = hoje instanceof Date && !isNaN(hoje.getTime()) ? hoje : new Date();
+    return d.getFullYear() + "-" + (d.getMonth() < 9 ? "0" : "") + (d.getMonth() + 1);
+  }
+
+  // Como o bloco "Gasto do mês" fica. opcoes: { hoje: Date, semInternet: boolean }.
+  // nivel: normal (menos de 80%), perto (80% a menos de 100%), atingido (100% ou mais).
+  // estilo: o nivel, ou "antigo" quando o valor é de um mês anterior (aí não mostra selo de nível), ou "vazio".
+  function usoDoMes(ia, opcoes) {
+    var o = opcoes || {};
+    var u = usoValido(ia);
+    if (!u) {
+      return { visivel: false, texto: "", estilo: "vazio", titulo: USO.vazio_titulo, apoio: USO.vazio_apoio, nota: USO.nota };
+    }
+    var pct = Math.floor(u.gasto_centavos * 100 / u.teto_centavos);
+    var nivel = pct >= 100 ? "atingido" : pct >= 80 ? "perto" : "normal";
+    var antigo = u.mes < mesDeHoje(o.hoje);
+    var valor = Din.formatar(u.gasto_centavos), teto = Din.formatar(u.teto_centavos);
+    var aviso = null;
+    if (antigo) {
+      var nome = MESES[Number(u.mes.slice(5, 7)) - 1];
+      aviso = { icone: "i-espera", texto: "Valor de " + nome + ". " + (o.semInternet ? "Sem internet para atualizar." : "Toque em “Testar ligação” para atualizar.") };
+    } else if (o.semInternet) {
+      aviso = { icone: "i-semnet", texto: USO.sem_internet };
+    }
+    var mostraNivel = !antigo && nivel !== "normal";
+    return {
+      visivel: true,
+      texto: USO.titulo + ": " + valor + " de " + teto,
+      valor: valor, teto: "de " + teto, pct: pct, barra: Math.min(100, pct), pctTexto: pct + "% do limite",
+      nivel: nivel, estilo: antigo ? "antigo" : nivel,
+      selo: mostraNivel ? USO[nivel] : "", apoio: mostraNivel ? USO[nivel + "_apoio"] : "",
+      aviso: aviso, nota: USO.nota,
+    };
+  }
+
+  // Guarda o último valor recebido (só se válido) em db.config. Devolve true se gravou.
+  function guardarUso(db, ia) {
+    var u = usoValido(ia);
+    if (!u) return Promise.resolve(false);
+    return db.config.definir(CHAVES_USO.gasto, u.gasto_centavos).then(function () {
+      return db.config.definir(CHAVES_USO.teto, u.teto_centavos);
+    }).then(function () {
+      return db.config.definir(CHAVES_USO.mes, u.mes);
+    }).then(function () { return true; });
+  }
+
+  // Lê o último valor guardado: { gasto_centavos, teto_centavos, mes } ou null.
+  function lerUsoGuardado(db) {
+    return Promise.all([db.config.obter(CHAVES_USO.gasto), db.config.obter(CHAVES_USO.teto), db.config.obter(CHAVES_USO.mes)]).then(function (v) {
+      return usoValido({ gasto_centavos: v[0], teto_centavos: v[1], mes: v[2] });
+    }).catch(function () { return null; });
+  }
+
+  // Depois do Testar ligação: grava o valor novo (se veio) ou lê o último guardado, e devolve como o bloco fica.
+  function usoAposTeste(db, teste, hoje) {
+    var t = teste || {};
+    var base = t.uso ? guardarUso(db, t.uso).catch(function () {}).then(function () { return t.uso; }) : lerUsoGuardado(db);
+    return base.then(function (ia) { return usoDoMes(ia, { hoje: hoje, semInternet: !!t.semInternet && !t.uso }); });
+  }
+
+  // Ao abrir os Ajustes: mostra o último valor guardado.
+  function usoGuardado(db, hoje) {
+    return lerUsoGuardado(db).then(function (ia) { return usoDoMes(ia, { hoje: hoje }); });
   }
 
   function maiorMenor(v) {
@@ -127,6 +225,7 @@ var Ajustes = (function () {
   }
 
   return { TEXTOS: TEXTOS, estadoOlho: estadoOlho, limpar: limpar, validar: validar, carregar: carregar, salvar: salvar,
-    textoDoResultado: textoDoResultado, testarLigacao: testarLigacao, compararVersoes: compararVersoes, buscarAtualizacao: buscarAtualizacao };
+    textoDoResultado: textoDoResultado, testarLigacao: testarLigacao,
+    usoValido: usoValido, usoDoMes: usoDoMes, guardarUso: guardarUso, lerUsoGuardado: lerUsoGuardado, usoAposTeste: usoAposTeste, usoGuardado: usoGuardado, compararVersoes: compararVersoes, buscarAtualizacao: buscarAtualizacao };
 })();
 if (typeof module !== "undefined") module.exports = Ajustes;

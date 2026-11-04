@@ -309,6 +309,26 @@ button, a { min-height: 32px; min-width: 32px; }
 .res[data-tom="erro"] .ic, .res[data-tom="erro"] b { color: var(--saida); }
 .res[data-tom="info"] { border-left-color: var(--accent); }
 
+/* ---- Gasto do mês (#97): o app só mostra o valor que o script contou ---- */
+.uso-valor { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--sp-2); margin: 0; }
+.uso-valor b { font-size: var(--t-xl); font-weight: var(--w-numero); line-height: 1.15; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.uso-valor span { color: var(--muted); font-size: var(--t-b); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.uso-barra { height: 8px; margin-top: var(--sp-3); border-radius: var(--r-pilula); background: var(--line); border: 1px solid var(--line-strong); overflow: hidden; }
+.uso-barra i { display: block; height: 100%; border-radius: var(--r-pilula); background: var(--accent); }
+.uso-pct { margin: var(--sp-2) 0 0; color: var(--muted); font-size: var(--t-s); }
+.secao-cartao[data-nivel="perto"] .uso-barra i { background: var(--alerta); }
+.secao-cartao[data-nivel="atingido"] .uso-barra i { background: var(--saida); }
+.secao-cartao[data-nivel="antigo"] .uso-barra i { background: var(--muted); }
+.uso-nivel { margin-top: var(--sp-3); }
+.marca[data-tom="perto"] { background: var(--alerta-bg); color: var(--alerta); border: 1.5px solid var(--alerta); }
+.marca[data-tom="atingido"] { background: var(--alerta-bg); color: var(--saida); border: 1.5px solid var(--saida); }
+.uso-apoio { margin: var(--sp-2) 0 0; color: var(--fg); font-size: var(--t-s); line-height: 1.4; }
+.uso-vazio { margin: 0; color: var(--muted); font-size: var(--t-s); line-height: 1.4; }
+.uso-vazio b { display: block; color: var(--fg); font-size: var(--t-b); font-weight: var(--w-forte); margin-bottom: var(--sp-1); }
+.uso-aviso.res-nota { margin: var(--sp-3) 0 0; color: var(--fg); }
+.uso-aviso.res-nota .ic { color: var(--alerta); }
+.uso-nota { margin: var(--sp-3) 0 0; padding-top: var(--sp-3); border-top: 1px solid var(--line); }
+
 /* Como instalar */
 .instalar { background: var(--surface); border-radius: var(--r-cartao); box-shadow: var(--sh); }
 .instalar summary { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-height: var(--toque); padding: var(--sp-2) var(--sp-4); font-size: var(--t-b); font-weight: var(--w-forte); list-style: none; cursor: pointer; border-radius: var(--r-cartao); }

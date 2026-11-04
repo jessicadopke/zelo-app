@@ -1,6 +1,6 @@
 // Zelo: núcleo do app. Navegação por abas, tema e cópia offline. O conteúdo das telas vem nas próximas partes.
 // Depende de js/rotas.js (Rotas) e js/tema.js (Tema), carregados antes no index.html.
-const APP_VERSION = "0.7.2";
+const APP_VERSION = "0.8.0";
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -461,6 +461,46 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
       });
       if (primeiro) primeiro.focus();
     }
+    // ---- Gasto do mês (#97): só mostra; o texto vem de Ajustes.usoDoMes ----
+    const usoCartao = $("#uso-cartao");
+    function pintarUso(v) {
+      if (!usoCartao) return;
+      usoCartao.textContent = "";
+      usoCartao.removeAttribute("aria-busy");
+      if (!v.visivel) {
+        usoCartao.removeAttribute("data-nivel");
+        const p = el("p", "uso-vazio");
+        p.append(el("b", "", v.titulo), document.createTextNode(v.apoio));
+        usoCartao.appendChild(p);
+      } else {
+        usoCartao.dataset.nivel = v.estilo;
+        const linha = el("p", "uso-valor");
+        linha.append(el("b", "", v.valor), el("span", "", v.teto));
+        const barra = el("div", "uso-barra");
+        barra.setAttribute("aria-hidden", "true");
+        const enche = document.createElement("i");
+        enche.style.width = v.barra + "%";
+        barra.appendChild(enche);
+        usoCartao.append(linha, barra, el("p", "uso-pct", v.pctTexto));
+        if (v.selo) {
+          const m = el("p", "marca uso-nivel");
+          m.dataset.tom = v.nivel;
+          m.append(icone("i-atencao"), document.createTextNode(v.selo));
+          usoCartao.append(m, el("p", "uso-apoio", v.apoio));
+        }
+        if (v.aviso) {
+          const a = el("p", "res-nota uso-aviso");
+          a.append(icone(v.aviso.icone), el("span", "", v.aviso.texto));
+          usoCartao.appendChild(a);
+        }
+      }
+      usoCartao.appendChild(el("p", "apoio uso-nota", v.nota));
+    }
+    function mostrarUsoGuardado() {
+      if (!ctx) return;
+      Ajustes.usoGuardado(ctx.db).then(pintarUso).catch(() => {});
+    }
+
     function zerarAvisos() { salvo.hidden = true; resultado.textContent = ""; }
 
     function pintarOlho(visivel) {
@@ -478,6 +518,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     aoMostrar.push((id) => {
       if (id !== "ajustes") { pintarOlho(false); return; }
       if (ctx && !sujo) preencher();
+      mostrarUsoGuardado();
     });
     [fUrl, fCod].forEach((f) => f.addEventListener("input", () => {
       sujo = true;
@@ -517,6 +558,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
         if (!t) return;
         if (t.conferido) { versaoPonte = t.resultado.versao; pintarSobre(); }
         pintarResultado(resultado, t.resultado);
+        return Ajustes.usoAposTeste(ctx.db, t).then(pintarUso);
       }).catch(() => {}).then(() => {
         ocupado = false;
         testar.disabled = false;
@@ -559,7 +601,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
       });
     });
 
-    pronto.then((c) => { ctx = c; if (ctx) return preencher(); });
+    pronto.then((c) => { ctx = c; if (ctx) { mostrarUsoGuardado(); return preencher(); } });
   }
   iniciarAjustes();
 
