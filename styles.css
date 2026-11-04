@@ -199,6 +199,7 @@ button, a { min-height: 32px; min-width: 32px; }
 .cartao p { margin: var(--sp-2) 0 0; color: var(--muted); font-size: var(--t-s); line-height: 1.4; }
 .cartao strong { font-size: var(--t-l); font-weight: var(--w-forte); }
 .cartao .ic-grande { width: 32px; height: 32px; color: var(--accent); }
+.cartao:not(:last-child) { margin-bottom: var(--sp-3); }
 .esq { display: block; background: var(--line); border-radius: var(--r-campo); height: 20px; margin-top: var(--sp-3); animation: pulsa 1.4s var(--ease-suave) var(--laco); }
 .esq.g { height: 64px; border-radius: var(--r-cartao); }
 @keyframes pulsa { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
