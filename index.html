@@ -47,6 +47,9 @@ try {
   <symbol id="i-guardar" viewBox="0 0 24 24"><path d="M12 4v10M8 10.5l4 4 4-4"/><path d="M5 19h14"/></symbol>
   <symbol id="i-tirar" viewBox="0 0 24 24"><path d="M12 15V5M8 8.5l4-4 4 4"/><path d="M5 19h14"/></symbol>
   <symbol id="i-passar" viewBox="0 0 24 24"><path d="M5 8h13M14.5 4.5L18 8l-3.5 3.5"/><path d="M19 16H6M9.5 12.5L6 16l3.5 3.5"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l1.5-2.5h7L17 8h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/></symbol>
+  <symbol id="i-imagem" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="9" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></symbol>
+  <symbol id="i-arquivo" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9.5 12h5M9.5 16h5"/></symbol>
   <symbol id="i-pontos" viewBox="0 0 24 24"><path d="M12 5h.01M12 12h.01M12 19h.01" stroke-width="3"/></symbol>
 </svg>
 
@@ -79,6 +82,7 @@ try {
       <div id="ini-principal">
         <h1 id="t-inicio">Início</h1>
         <div class="atalho-novo"><a class="btn-p" href="#novo" data-novo><svg class="ic" aria-hidden="true"><use href="#i-mais"/></svg>Novo lançamento</a></div>
+        <div class="ler-atalho"><a class="btn-sec" href="#ler" data-ler><svg class="ic" aria-hidden="true"><use href="#i-arquivo"/></svg>Ler comprovante</a></div>
         <p class="inicio-saudacao" id="saudacao">Olá</p>
         <div id="ini-conteudo"></div>
       </div>
@@ -224,6 +228,11 @@ try {
         <svg class="ic" aria-hidden="true"><use href="#i-semnet"/></svg>
         <div><strong>Sem internet por enquanto</strong>Pode salvar. O Zelo envia quando a conexão voltar.</div>
       </div>
+      <div class="ler-convite" id="lf-convite" hidden>
+        <svg class="ic" aria-hidden="true"><use href="#i-arquivo"/></svg>
+        <p>Tem o comprovante ou o extrato?</p>
+        <a class="btn-link" href="#ler" data-ler>Ler comprovante</a>
+      </div>
       <div class="form-nota" id="lf-nota" role="status"></div>
 
       <fieldset class="campo-grupo">
@@ -335,6 +344,8 @@ try {
     <button class="btn-p" id="mv-salvar" type="button">Salvar</button>
   </footer>
 </section>
+<!-- Ler comprovante (#ler): tela cheia por cima das abas. Todo o conteúdo é desenhado por js/tela-leitura.js; o arquivo só fica na memória. -->
+<section class="form" id="ler" aria-label="Ler comprovante" hidden></section>
 <div class="folha-fundo" id="mv-folha-fundo" hidden>
   <div class="folha" role="alertdialog" aria-modal="true" aria-labelledby="mv-folha-t">
     <h2 id="mv-folha-t" tabindex="-1">Descartar o que você digitou?</h2>
@@ -372,6 +383,8 @@ try {
 <script src="js/opcoes.js"></script>
 <script src="js/lancar.js"></script>
 <script src="js/tela-lancar.js"></script>
+<script src="js/leitura.js"></script>
+<script src="js/tela-leitura.js"></script>
 <script src="js/reserva.js"></script>
 <script src="js/tela-movimento.js"></script>
 <script src="js/tela-reserva.js"></script>

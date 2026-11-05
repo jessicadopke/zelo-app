@@ -11,7 +11,9 @@ var Fila = (function () {
   // Tipos aceitos (contrato seção 4; issues #37 e #39): os quatro últimos são movimentos, não gasto nem renda.
   var TIPOS = ["entrou", "saiu", "fatura", "guardou", "tirou", "saldo"];
   // Como o lançamento nasceu (contrato, seção 4). Ao editar a origem é mantida; origem que o app não conhece vira manual.
-  var ORIGENS = ["manual", "importacao"];
+  // "foto" (issue #73): lido de um comprovante e salvo pela tela "O que entendi".
+  var ORIGENS = ["manual", "importacao", "foto"];
+  var RE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
   var EDITAVEIS = ["data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "apagado", "cartao", "caixinha"];
   // Campos acrescentados depois do contrato 1: só vão para a ponte se tiverem valor (ou se o guardado tinha, para limpar).
   var OPCIONAIS_NOVOS = ["cartao", "caixinha"];
@@ -149,20 +151,32 @@ var Fila = (function () {
   function criar(db, dados, relogio) {
     var agora = (relogio || relogioPadrao)();
     var d = dados || {};
-    var id = novoId();
+    // id e origem de fora só para a leitura de comprovante (#73): o id nasce quando a proposta chega e Salvar duas vezes
+    // não duplica (mesmo id: devolve o que já está guardado, sem gravar de novo). Sem id, o app gera um novo.
+    if (d.id !== undefined && !(typeof d.id === "string" && RE_ID.test(d.id))) return Promise.reject(invalido("id", "O código do gasto não é válido."));
+    var id;
     var registro;
     try {
+      id = d.id !== undefined ? d.id : novoId();
       registro = conferir({
         id: id, data: d.data, tipo: d.tipo, valor_centavos: d.valor_centavos, favorecido: d.favorecido,
-        categoria: d.categoria, pessoa: d.pessoa, forma: d.forma, cartao: d.cartao, caixinha: d.caixinha, apagado: "", editado_em: Dat.agoraIso(agora),
+        categoria: d.categoria, pessoa: d.pessoa, forma: d.forma, origem: d.origem, cartao: d.cartao, caixinha: d.caixinha, apagado: "", editado_em: Dat.agoraIso(agora),
       });
     } catch (e) { return Promise.reject(e); }
     var local = Object.assign(paraLocal(registro), { situacao: "esperando" });
+    var repetido = null;
     return db.transacao(["lancamentos", "fila"], function (o) {
-      return o.lancamentos.gravar(local).then(function () {
-        return o.fila.acrescentar({ id: id, registro: registro, entrou_em: registro.editado_em });
+      return o.lancamentos.obter(id).then(function (existente) {
+        if (existente) { repetido = existente; return null; }
+        return o.lancamentos.gravar(local).then(function () {
+          return o.fila.acrescentar({ id: id, registro: registro, entrou_em: registro.editado_em });
+        });
       });
-    }).then(function () { avisar("criou"); return local; });
+    }).then(function () {
+      if (repetido) return repetido;
+      avisar("criou");
+      return local;
+    });
   }
 
   // Grava vários lançamentos numa transação só (ex.: passar entre caixinhas = tirou + guardou). Todos ou nenhum.

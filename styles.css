@@ -638,6 +638,87 @@ button, a { min-height: 32px; min-width: 32px; }
 /* apoio logo abaixo do painel do mês (Início): "Saldo do mês" */
 .painel + .apoio { margin: 0 var(--sp-1) var(--sp-3); }
 
+/* ================= NOVO NO APP: leitura de comprovante e extrato ================= */
+
+/* ---- entrada: botão no Início e convite no alto do "Novo lançamento" ---- */
+.ler-atalho { margin: 0 0 var(--sp-4); }
+.ler-atalho .btn-sec { text-decoration: none; }
+.ler-convite { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); margin: 0 0 var(--sp-4); padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4); background: var(--accent-soft); border-radius: var(--r-campo); }
+.ler-convite > .ic { color: var(--accent); }
+.ler-convite p { flex: 1 1 8rem; margin: 0; font-size: var(--t-s); font-weight: var(--w-forte); line-height: 1.4; }
+.ler-convite .btn-link { flex: none; text-decoration: none; }
+
+/* ---- escolher o arquivo ---- */
+.ler-fontes { display: grid; gap: var(--sp-2); margin: 0 0 var(--sp-4); }
+.ler-fonte { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-height: 64px; padding: var(--sp-2) var(--sp-4); background: var(--surface); color: var(--fg); border: 1.5px solid var(--line-strong); border-radius: var(--r-campo); font: inherit; font-size: var(--t-b); font-weight: var(--w-forte); text-align: left; }
+.ler-fonte .ic { width: 28px; height: 28px; color: var(--accent); }
+.ler-fonte small { display: block; margin-top: 2px; color: var(--muted); font-size: var(--t-s); font-weight: var(--w-texto); line-height: 1.35; }
+.ler-fonte:active { transform: scale(var(--escala-aperta)); background: var(--accent-soft); }
+.ler-fonte:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.ler-fonte:disabled { background: var(--line); color: var(--muted); border-color: var(--line-strong); }
+.ler-fonte:disabled .ic { color: var(--muted); }
+.ler-cont { margin: 0 0 var(--sp-2); font-size: var(--t-b); font-weight: var(--w-forte); }
+.ler-lista { list-style: none; margin: 0 0 var(--sp-3); padding: 0; background: var(--surface); border-radius: var(--r-cartao); box-shadow: var(--sh); overflow: hidden; }
+.ler-lista li { display: grid; grid-template-columns: 40px minmax(0, 1fr) var(--toque); gap: var(--sp-3); align-items: center; padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4); }
+.ler-lista li + li { border-top: 1px solid var(--line); }
+.ler-lista .lan-ic { grid-row: auto; }
+.ler-nome { margin: 0; font-size: var(--t-b); font-weight: var(--w-forte); line-height: 1.3; }
+.ler-sub { margin: 2px 0 0; color: var(--muted); font-size: var(--t-s); line-height: 1.35; }
+
+/* ---- Lendo e erros: reaproveitam .cartao; só o tom é novo ---- */
+.cartao[data-tom="atencao"] .ic-grande { color: var(--alerta); }
+.cartao .botoes { margin-top: var(--sp-4); }
+.cartao .botoes .btn-p, .cartao .botoes .btn-sec { margin-top: 0; }
+.cartao .cartao-extra { margin-top: var(--sp-3); }
+
+/* ---- O que entendi: uma linha = um cartão ---- */
+.ll { margin: 0 0 var(--sp-3); padding: var(--sp-4); background: var(--surface); border-radius: var(--r-cartao); box-shadow: var(--sh); }
+.ll-topo { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: var(--sp-1) var(--sp-3); align-items: start; }
+.ll-topo > .din { grid-column: 3; grid-row: 1; }
+.ll-vazio { color: var(--muted); font-weight: var(--w-texto); }
+.ll .envio-dados { margin-top: var(--sp-3); }
+.ll-aviso { margin: var(--sp-3) 0 0; padding: var(--sp-3); background: var(--alerta-bg); border: 1.5px solid var(--alerta); border-radius: var(--r-campo); color: var(--fg); }
+.ll-aviso-t { display: flex; align-items: flex-start; gap: var(--sp-2); margin: 0; color: var(--alerta); font-size: var(--t-s); font-weight: var(--w-forte); line-height: 1.4; }
+.ll-aviso-t .ic { width: 18px; height: 18px; margin-top: 1px; }
+.ll-aviso[data-pronto] { background: var(--accent-soft); border-color: var(--accent); }
+.ll-aviso[data-pronto] .ll-aviso-t, .ll-aviso[data-pronto] .ll-aviso-t .ic { color: var(--fg); }
+.ll-aviso .campo, .ll-aviso .campo-grupo { margin: var(--sp-3) 0 0; }
+.ll-aviso .campo label, .ll-aviso .campo-grupo legend { font-size: var(--t-s); }
+.ll-aviso .campo-erro { margin-top: var(--sp-1); }
+.ll-aviso .btn-sec { margin-top: var(--sp-3); }
+.ll-parecido { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-3); align-items: center; margin: var(--sp-2) 0 0; padding: var(--sp-2) var(--sp-3); background: var(--surface); border-radius: var(--r-campo); }
+.ll-parecido .lan-titulo { font-size: var(--t-s); }
+.ll-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); margin-top: var(--sp-4); }
+.ll-acoes .btn-p { grid-column: 1 / -1; margin-top: 0; }
+.ll-acoes .btn-sec { margin-top: 0; }
+.ll-falta { margin-top: var(--sp-2); }
+.ll-feita { display: flex; align-items: center; gap: var(--sp-3); min-height: var(--toque); margin: 0 0 var(--sp-2); padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-4); background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--r-campo); font-size: var(--t-s); line-height: 1.4; }
+.ll-feita > .ic { width: 20px; height: 20px; color: var(--entrada); }
+.ll-feita[data-tom="descartada"] > .ic { color: var(--muted); }
+.ll-feita > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ll-feita .btn-link { flex: none; padding: 0 var(--sp-2); font-size: var(--t-s); }
+
+/* linhas que não contam: recolhidas (reaproveita o painel .instalar) */
+.ll-ign { margin: 0 0 var(--sp-3); }
+.ll-ign ul { list-style: none; margin: 0; padding: 0 var(--sp-4) var(--sp-3); }
+.ll-ign li { padding: var(--sp-3) 0; border-top: 1px solid var(--line); }
+.ll-ign .lan-titulo { font-size: var(--t-b); }
+.ll-ign .lan-sub { white-space: normal; }
+.ll-ign .res-nota { margin: var(--sp-2) 0 0; color: var(--fg); }
+.ll-ign .res-nota .ic { color: var(--accent); }
+.ll-ign .btn-link { margin-left: calc(var(--sp-3) * -1); }
+
+/* rodapé do lote: um botão sobre o outro, cabe com texto grande e em 320 px */
+.form-rodape.ll-lote { grid-template-columns: 1fr; }
+.ll-lote .btn-p, .ll-lote .btn-sec { margin-top: 0; }
+.ll[data-tipo="saiu"] .lan-ic .ic { color: var(--saida); }
+.ll[data-tipo="entrou"] .lan-ic .ic { color: var(--entrada); }
+.ll[data-tipo="fatura"] .lan-ic .ic { color: var(--accent); }
+.ll .lan-sub { white-space: normal; }
+.cartao .botoes .btn-p { gap: var(--sp-2); }
+.nota-ic + .ll { margin-top: var(--sp-3); }
+#ler { z-index: 9; } /* abaixo do formulário de Corrigir (z-index 10), que abre por cima dela */
+
 /* ---- #16 parte F: "alterado no outro celular" ---- */
 /* marca na linha de Lançamentos (neutra: não é erro, não é espera) */
 .marca[data-tom="outro"] { background: var(--surface); color: var(--fg); border: 1.5px solid var(--line-strong); }

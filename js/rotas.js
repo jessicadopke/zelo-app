@@ -28,13 +28,15 @@ var Rotas = (function () {
     return j > i ? "dir" : "esq";
   }
   // Telas de tela cheia, fora das abas: "#novo" -> { tipo: "novo" }; "#editar/<id>" -> { tipo: "editar", id };
-  // "#reserva/guardar|tirar|passar" e "#conferir" -> { tipo: "guardar" | "tirar" | "passar" | "conferir" }. O resto -> null.
+  // "#reserva/guardar|tirar|passar" e "#conferir" -> { tipo: "guardar" | "tirar" | "passar" | "conferir" }; "#ler" -> { tipo: "ler" }
+  // (Ler comprovante, #73). O resto -> null.
   // O nome de caixinha ou de cartão nunca vai no endereço: quem abre pelo botão leva isso em memória.
   // O id só pode ter letras, números e traço (o que o app gera); qualquer outra coisa não abre nada.
   function telaDoHash(hash) {
     var h = String(hash || "").replace(/^#/, "");
     if (h === "novo") return { tipo: "novo" };
     if (h === "conferir") return { tipo: "conferir" };
+    if (h === "ler") return { tipo: "ler" };
     var r = /^reserva\/(guardar|tirar|passar)$/.exec(h);
     if (r) return { tipo: r[1] };
     var m = /^editar\/([0-9A-Za-z-]{1,64})$/.exec(h);

@@ -1,6 +1,6 @@
 // Zelo: núcleo do app. Navegação por abas, tema e cópia offline. O conteúdo das telas vem nas próximas partes.
 // Depende de js/rotas.js (Rotas) e js/tema.js (Tema), carregados antes no index.html.
-const APP_VERSION = "0.8.0";
+const APP_VERSION = "0.9.0";
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -40,7 +40,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   // ---- navegação ----
   let atual = null;
   let reservaAberta = false; // tela da Reserva (#reserva), que mora dentro do Início
-  let telaReserva = null, telaMov = null; // criadas mais abaixo
+  let telaReserva = null, telaMov = null, telaLeitura = null; // criadas mais abaixo
   const aoMostrar = []; // funções chamadas com o id da aba que acabou de aparecer
 
   function mostrar(id) {
@@ -100,6 +100,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     $("#faixa-semnet").hidden = navigator.onLine !== false;
     if (telaVer) telaVer.rede();
     if (telaReserva) telaReserva.rede();
+    if (telaLeitura) telaLeitura.rede();
   }
   window.addEventListener("online", atualizarRede);
   window.addEventListener("offline", atualizarRede);
@@ -325,6 +326,59 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     abrirTelaLancar({ tipo: "novo" }, "#novo");
   }));
 
+  // ---- Ler comprovante (#ler, js/tela-leitura.js): tela cheia por cima das abas ----
+  // O arquivo lido só existe na memória da tela e é solto ao sair; nada dele vai para o endereço nem para o histórico.
+  const lerEl = $("#ler"), appEl = $(".app");
+  let lerAberta = false, lerFoco = null;
+  telaLeitura = typeof TelaLeitura !== "undefined" && typeof Leitura !== "undefined" && lerEl
+    ? TelaLeitura.criar({
+      raiz: lerEl,
+      pronto: pronto,
+      hoje: () => Datas.hoje(),
+      online: () => navigator.onLine !== false,
+      sair: () => { saindoDeVez = true; history.back(); },
+      // "Ver lançamentos" e "Lançar à mão" trocam a tela de leitura pela aba ou pelo formulário, sem deixar entrada no histórico.
+      irLancamentos: () => { fecharLer(); history.replaceState({ aba: "lancamentos" }, "", "#lancamentos"); mostrar("lancamentos"); },
+      lancarAMao: () => { fecharLer(); history.replaceState({ aba: atual, tela: true }, "", "#novo"); hashDaTela = "#novo"; abrirPorRota({ tipo: "novo" }); },
+      // Corrigir abre o formulário de sempre, já preenchido; o Salvar dele grava a linha (origem foto).
+      corrigir: (previa) => { lerEl.inert = true; abrirTelaLancar({ tipo: "novo", previa: previa }, "#novo"); },
+    })
+    : null;
+  function mostrarLer() {
+    if (lerAberta || !telaLeitura) return;
+    lerAberta = true;
+    lerFoco = document.activeElement;
+    appEl.inert = true;
+    telaLeitura.abrir();
+  }
+  function fecharLer() {
+    if (!lerAberta) return;
+    lerAberta = false;
+    telaLeitura.fechar();
+    lerEl.inert = false;
+    appEl.inert = false;
+    if (lerFoco && lerFoco.focus && document.contains(lerFoco)) lerFoco.focus({ preventScroll: true });
+    lerFoco = null;
+  }
+  function abrirLer() {
+    if (lerAberta || !telaLeitura) return;
+    empurrar("#ler");
+    mostrarLer();
+  }
+  $$("[data-ler]").forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (algumFormAberto()) {
+      // Vindo do convite do Novo lançamento: a leitura troca o formulário (sem empilhar mais uma entrada).
+      const ativo = formAtivo();
+      ativo.fechar();
+      history.replaceState({ aba: atual, tela: true }, "", "#ler");
+      hashDaTela = "#ler";
+      mostrarLer();
+      return;
+    }
+    abrirLer();
+  }));
+
   // ---- Reserva: tela dentro do Início (#reserva); a barra de baixo continua com "Início" marcado ----
   const reservaEl = $("#reserva-tela"), principalEl = $("#ini-principal");
   function abrirReservaTela() {
@@ -395,6 +449,25 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   // Botão voltar do Android: fecha o formulário (perguntando se a pessoa mexeu) ou mostra a tela anterior, sem empilhar de novo.
   window.addEventListener("popstate", () => {
     const t = Rotas.telaDoHash(location.hash);
+    if (t && t.tipo === "ler") {
+      // Voltou do Corrigir (o formulário fecha) ou abriu #ler direto.
+      if (algumFormAberto()) {
+        const ativo = formAtivo();
+        if (!saindoDeVez && ativo.mexeu()) {
+          history.pushState({ aba: atual, tela: true, sub: reservaAberta ? "reserva" : null }, "", "#novo");
+          ativo.pedirSaida();
+          return;
+        }
+        ativo.fechar();
+        saindoDeVez = false;
+      }
+      if (lerAberta) {
+        lerEl.inert = false;
+        appEl.inert = true;
+        telaLeitura.voltou();
+      } else mostrarLer();
+      return;
+    }
     if (t) {
       if (!algumFormAberto()) { hashDaTela = location.hash; abrirPorRota(t); }
       return;
@@ -409,6 +482,14 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
       ativo.fechar();
       avisos.tentar(); // o que chegou com o formulário aberto entra agora
     }
+    if (lerAberta) {
+      if (!saindoDeVez && telaLeitura.mexeu()) {
+        history.pushState({ aba: atual, tela: true, sub: reservaAberta ? "reserva" : null }, "", "#ler");
+        telaLeitura.pedirSaida();
+        return;
+      }
+      fecharLer();
+    }
     saindoDeVez = false;
     const aba = Rotas.abaDoHash(location.hash);
     if (aba !== atual) mostrar(aba);
@@ -419,6 +500,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   // Aberto direto por #novo, #editar/<id>, #reserva/... ou #conferir (por exemplo, ao recarregar): a aba fica por baixo.
   const telaInicial = Rotas.telaDoHash(hashInicial);
   if (Rotas.subtelaDoHash(hashInicial)) abrirReserva();
+  else if (telaInicial && telaInicial.tipo === "ler") abrirLer();
   else if (telaInicial) abrirTelaLancar(telaInicial, hashInicial);
 
   // ---- Ajustes: ligação com a planilha e sobre o app ----

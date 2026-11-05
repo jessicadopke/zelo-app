@@ -77,12 +77,14 @@ var Lancar = (function () {
       });
     }
 
-    function salvarNovo(campos, ctx) {
+    // origem: { id, origem } (opcional): a leitura de comprovante (#73) cria com o id gerado quando a proposta chegou e origem "foto".
+    function salvarNovo(campos, ctx, origem) {
       var p = For.preparar(campos, ctx);
       var r = For.validar(p.campos, p.ctx);
       if (!r.ok) return Promise.resolve({ ok: false, erros: r.erros, avisos: r.avisos });
+      var registro = origem ? Object.assign({}, r.registro, { id: origem.id, origem: origem.origem }) : r.registro;
       return umPorVez(function () {
-        return Lan.criar(db, r.registro, relogio).then(function (l) { return { ok: true, lancamento: l, avisos: r.avisos }; });
+        return Lan.criar(db, registro, relogio).then(function (l) { return { ok: true, lancamento: l, avisos: r.avisos }; });
       });
     }
 

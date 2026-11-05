@@ -26,11 +26,13 @@ var Ponte = (function () {
     var versaoApp = typeof op.versaoApp === "string" ? op.versaoApp : "";
     var limite = typeof op.tempoLimite === "number" ? op.tempoLimite : TEMPO_LIMITE;
 
-    function chamar(acao, dados) {
-      return executar(acao, dados).catch(function () { return local("resposta_estranha"); });
+    // extra.tempoLimite (ms): só para esta chamada (a leitura de comprovante espera até 60 s; o resto, 30 s).
+    function chamar(acao, dados, extra) {
+      var espera = extra && typeof extra.tempoLimite === "number" && extra.tempoLimite > 0 ? extra.tempoLimite : limite;
+      return executar(acao, dados, espera).catch(function () { return local("resposta_estranha"); });
     }
 
-    async function executar(acao, dados) {
+    async function executar(acao, dados, espera) {
       var cfg = null;
       try { cfg = await lerConfig(); } catch (_) { cfg = null; }
       var url = cfg && typeof cfg.url === "string" ? cfg.url.trim() : "";
@@ -48,7 +50,7 @@ var Ponte = (function () {
       var controle = Controle ? new Controle() : null;
       var estourou = false;
       var timer = null;
-      if (controle && agendar) timer = agendar(function () { estourou = true; controle.abort(); }, limite);
+      if (controle && agendar) timer = agendar(function () { estourou = true; controle.abort(); }, espera);
 
       try {
         var resp;

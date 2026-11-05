@@ -31,6 +31,7 @@ var TelaLancar = (function () {
     var original = null, inicial = null, opcoes = null, lancamentos = [];
     var lugar = null, qual = null, lugarPadrao = "", abriuPorFatura = false, listasVazias = false, ultimoAviso = "", ultimoAberto = "";
     var voltarFocoDaFolha = null, salvando = false, ultimaSugestao = "", tocou = {}, desligarFila = null, voltarFoco = null;
+    var previa = null; // Corrigir da leitura de comprovante (#73): { campos, id, origem, aoSalvar } ou null
     var outro = null; // nota "trocada por outro celular": { id, passo: "troca" | "visto" | "apagado" | "mantido", atual }
 
     function el(tag, classe, texto) {
@@ -489,6 +490,7 @@ var TelaLancar = (function () {
       $("lf-sug").hidden = true;
       $("lf-sug-lista").textContent = "";
       $("lf-apagar-bloco").hidden = true;
+      if ($("lf-convite")) $("lf-convite").hidden = true;
       folhaFundo.hidden = true;
       form.inert = false;
       tocou = {};
@@ -543,13 +545,28 @@ var TelaLancar = (function () {
         campoValor.focus({ preventScroll: true });
       }
       pintarRede();
+      atualizarConvite();
       atualizarOpcoes();
     }
 
+    // Corrigir da leitura de comprovante: o que foi lido por cima dos padrões do Novo (campo vazio não apaga o padrão).
+    function comPrevia(base, lido) {
+      var saida = Object.assign({}, base);
+      ["tipo", "valor", "data", "favorecido", "categoria", "forma", "cartao"].forEach(function (k) {
+        if (lido && typeof lido[k] === "string" && lido[k] !== "") saida[k] = lido[k];
+      });
+      return saida;
+    }
+    // O convite "Tem o comprovante ou o extrato?" só aparece em Novo e enquanto nada foi digitado.
+    function atualizarConvite() {
+      var c = $("lf-convite");
+      if (c) c.hidden = !(aberto && modo === "novo" && !previa && !abriuPorFatura && !mexeu());
+    }
     function abrirTela(tela) {
       var minha = ++geracao;
       aberto = true;
       modo = tela.tipo === "editar" ? "editar" : "novo";
+      previa = modo === "novo" && tela.previa && typeof tela.previa === "object" ? tela.previa : null;
       abriuPorFatura = modo === "novo" && typeof tela.fatura === "string" && tela.fatura !== "";
       if (!voltarFoco) voltarFoco = doc.activeElement;
       titulo.textContent = modo === "editar" ? "Editar lançamento" : "Novo lançamento";
@@ -570,6 +587,7 @@ var TelaLancar = (function () {
         return modo === "editar" ? s.abrirEdicao(tela.id, env.hoje()) : s.abrirNovo(env.hoje(), abriuPorFatura ? { fatura: tela.fatura } : null);
       }).then(function (dados) {
         if (minha !== geracao || !aberto) return;
+        if (previa && dados && dados.campos) dados.campos = comPrevia(dados.campos, previa.campos);
         concluirAbertura(dados, modo === "editar" && !dados.achou);
       }).catch(function () {
         if (minha !== geracao || !aberto) return;
@@ -604,6 +622,7 @@ var TelaLancar = (function () {
     function fechar() {
       if (!aberto) return;
       aberto = false;
+      previa = null;
       geracao++;
       if (desligarFila) { desligarFila(); desligarFila = null; }
       form.hidden = true;
@@ -634,6 +653,13 @@ var TelaLancar = (function () {
       if (r.ignorado) return;
       if (r.ok) {
         if (r.nada) { pintarSalvando(false); env.sair(); return; }
+        if (previa) {
+          // Veio da leitura de comprovante: quem avisa que guardou é a tela de lá.
+          var aoSalvar = previa.aoSalvar;
+          env.sair();
+          if (typeof aoSalvar === "function") aoSalvar(r.lancamento);
+          return;
+        }
         var online = env.online() !== false;
         env.sair();
         env.avisar({ texto: online ? "Guardado e enviando…" : "Guardado. Vai para a planilha quando houver internet.", icone: "i-ok", duracao: 6000 });
@@ -660,7 +686,7 @@ var TelaLancar = (function () {
       var campos = lerCampos();
       var p = modo === "editar" && original
         ? sessao.salvarEdicao(original, campos, contexto())
-        : sessao.salvarNovo(campos, contexto());
+        : sessao.salvarNovo(campos, contexto(), previa ? { id: previa.id, origem: previa.origem } : undefined);
       p.then(aposSalvar).catch(function () { pintarSalvando(false); mostrarErroBanco("Não consegui guardar no celular."); });
     }
 
@@ -713,6 +739,8 @@ var TelaLancar = (function () {
     });
     $("lf-campos").addEventListener("submit", function (e) { e.preventDefault(); });
 
+    form.addEventListener("input", atualizarConvite);
+    form.addEventListener("change", atualizarConvite);
     form.addEventListener("change", function (e) {
       var t = e.target;
       if (t.name === "lf-tipo") { aoTrocarTipo(); return; }
