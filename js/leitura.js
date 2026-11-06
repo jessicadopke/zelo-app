@@ -95,6 +95,8 @@ var Leitura = (function () {
       tipo: tipo,
       favorecido: textoCurto(l.favorecido, 80),
       categoria: textoCurto(l.categoria, 40),
+      // opcional (#106): de onde veio a categoria; script antigo não manda, e valor desconhecido vale "sem origem"
+      categoria_origem: (l.categoria_origem === "historico" || l.categoria_origem === "modelo") && textoCurto(l.categoria, 40) !== "" ? l.categoria_origem : "",
       forma: textoCurto(l.forma, 30),
       sugestao: l.sugestao === "ignorar" ? "ignorar" : "lancar",
       motivo: textoCurto(l.motivo, 40),

@@ -1,4 +1,5 @@
 // Zelo: a tela "Ler comprovante" (#73, parte 1): escolher foto ou PDF, "Lendo…", erros e "O que entendi" (Salvar, Corrigir, Descartar).
+// Extrato (#101): várias linhas, painel das linhas que não contam ("Lançar mesmo assim") e o lote ("Salvar todas as válidas").
 // Só desenho e ligação: as regras estão em Leitura (arquivo e resposta) e em Lancar (gravar). Tudo que vem da leitura ou da
 // planilha entra com textContent, nunca como HTML. DESENHO: specs/73-design.md.
 // PRIVACIDADE: o arquivo só existe nas variáveis desta tela (memória) e é solto ao sair. Aqui não há IndexedDB, localStorage,
@@ -12,12 +13,23 @@ var TelaLeitura = (function () {
   var Lan = typeof Lancar !== "undefined" ? Lancar : require("./lancar.js");
   var Opc = typeof Opcoes !== "undefined" ? Opcoes : require("./opcoes.js");
   var Fil = typeof Fila !== "undefined" ? Fila : require("./fila.js");
+  var Dup = typeof Duplicado !== "undefined" ? Duplicado : require("./duplicado.js");
+  var Sel = typeof SeletorCategoria !== "undefined" ? SeletorCategoria : require("./seletor-categoria.js");
 
   var PALAVRA = { saiu: "Saiu", entrou: "Entrou", fatura: "Fatura" };
   var ICONE_TIPO = { saiu: "i-saiu", entrou: "i-entrou", fatura: "i-cartao" };
   // Nome de cada campo na frase "Falta preencher: …", na ordem da tela.
   var FALTA = [["tipo", "o tipo"], ["valor_centavos", "o valor"], ["data", "a data"], ["favorecido", "quem recebeu"], ["categoria", "a categoria"], ["cartao", "o cartão"]];
-  var SEM_CATEGORIA = "__sem__";
+  var SEM_CATEGORIA = Sel.SEM_CATEGORIA;
+  // Por que o script diz que a linha não conta (motivo -> ícone e texto, specs/73-design.md seção 9.2).
+  var MOTIVO = {
+    transferencia_familia: ["i-passar", "Pix entre contas da família: não conta como gasto nem renda"],
+    saldo: ["i-info", "Saldo do dia: não é um lançamento"],
+    cabecalho: ["i-info", "Título do extrato: não é um lançamento"],
+    total: ["i-info", "Total do extrato: não é um lançamento"],
+    rendimento_zero: ["i-info", "Rendimento zerado: nada a lançar"]
+  };
+  var MOTIVO_OUTRO = ["i-info", "Parece que não é um lançamento"];
 
   // env: { raiz (a <section class="form" id="ler">), doc?, pronto: Promise<{ db, ponte } | null>, hoje(), online(),
   //        sair(), irLancamentos(), lancarAMao(), corrigir(previa), setTimeout?, clearTimeout?, novoId?, preparar?(file) }
@@ -34,8 +46,13 @@ var TelaLeitura = (function () {
     var aviso = "";               // aviso do arquivo (um por vez)
     var preparando = false, demora = false;
     var erro = null;              // { caso, mensagem }
-    var cards = [], opcoes = null, sessao = null, documento = "comprovante";
-    var folha = null;             // null | "sair"
+    var cards = [], opcoes = null, sessao = null, documento = "comprovante", cortado = false, painelAberto = false;
+    var lote = null;              // botões do rodapé do lote (quando há)
+    var existentes = [];          // foto dos lançamentos do aparelho (cópia local, que inclui a fila) quando a proposta chega (#100)
+    var usadas = [];              // categorias mais usadas, contadas na cópia local de lançamentos (#106)
+    var seletores = [];           // seletores de categoria desenhados agora (para fechar com "Voltar")
+    var buscandoCategorias = false, ponteDaTela = null, bancoDaTela = null;
+    var folha = null;             // null | "sair" | "resto"
     var avisoBaixo = "", timerAviso = null, timerDemora = null, timerLimite = null;
     var emFormulario = false;
     var entradas = null;          // os três <input type=file>
@@ -80,7 +97,15 @@ var TelaLeitura = (function () {
       cards = [];
       sessao = null;
       opcoes = null;
+      usadas = [];
+      existentes = [];
+      bancoDaTela = null;
+      ponteDaTela = null;
+      buscandoCategorias = false;
       folha = null;
+      cortado = false;
+      painelAberto = false;
+      lote = null;
       avisoBaixo = "";
       preparando = false;
       demora = false;
@@ -220,11 +245,20 @@ var TelaLeitura = (function () {
       return env.pronto.then(function (c) {
         if (!c) return null;
         sessao = Lan.criar(c.db);
-        return Opc.ler(c.db).catch(function () { return null; });
-      }).catch(function () { return null; }).then(function (op) {
+        bancoDaTela = c.db;
+        ponteDaTela = c.ponte || null;
+        return Promise.all([
+          Opc.ler(c.db).catch(function () { return null; }),
+          c.db.lancamentos.todos().catch(function () { return null; })
+        ]);
+      }).catch(function () { return null; }).then(function (res) {
         if (minha !== geracao || !aberto) return;
-        opcoes = op;
+        opcoes = res ? res[0] : null;
+        usadas = opcoes && res[1] ? Sel.maisUsadas(res[1], opcoes.categorias) : [];
         documento = r.documento;
+        cortado = r.cortado === true;
+        painelAberto = false;
+        existentes = res && res[1] ? res[1] : [];
         cards = r.linhas.map(function (l, n) { return novoCard(l, n); });
         arquivos = []; // o arquivo já cumpriu o papel: solta da memória
         passo = "entendi";
@@ -232,9 +266,38 @@ var TelaLeitura = (function () {
       });
     }
 
+    // A cópia local já traz o que ainda está na fila (Fila.criar grava nos dois), então basta ela. A foto fica só na memória.
+    function acharParecido(c) {
+      return Dup.acharParecido(
+        { tipo: c.tipo, valor_centavos: centavosDe(c), data: c.data, favorecido: c.favorecido },
+        existentes, cards.map(function (x) { return x.id; })
+      );
+    }
+
+    // "Tentar de novo" do seletor quando nem a lista guardada existe.
+    function buscarCategorias() {
+      if (buscandoCategorias || !bancoDaTela) return;
+      buscandoCategorias = true;
+      var minha = geracao;
+      pintar();
+      var p = ponteDaTela ? Opc.atualizar(bancoDaTela, ponteDaTela) : Promise.resolve(null);
+      Promise.resolve(p).catch(function () { return null; }).then(function () { return Opc.ler(bancoDaTela).catch(function () { return null; }); }).then(function (op) {
+        buscandoCategorias = false;
+        if (minha !== geracao || !aberto) return;
+        if (op) {
+          opcoes = op;
+          return bancoDaTela.lancamentos.todos().catch(function () { return null; }).then(function (l) {
+            usadas = l ? Sel.maisUsadas(l, op.categorias) : [];
+            pintar();
+          });
+        }
+        pintar();
+      });
+    }
+
     function novoCard(l, n) {
       return {
-        n: n, id: gerarId(), dados: l, estado: "aberta", salvando: false, erroSalvar: "", resumo: "",
+        n: n, id: gerarId(), dados: l, estado: l.sugestao === "ignorar" ? "ignorada" : "aberta", salvando: false, erroSalvar: "", resumo: "",
         // o que a pessoa vê e preenche (texto)
         tipo: l.tipo, valor: l.valor_centavos === null ? "" : Din.formatarCampo(l.valor_centavos), data: l.data,
         favorecido: l.favorecido, categoria: l.categoria, cartao: "",
@@ -249,7 +312,7 @@ var TelaLeitura = (function () {
       var d = c.dados.duvidas;
       FALTA.forEach(function (par) {
         var k = par[0];
-        if (d.indexOf(k) < 0) return;
+        if (k === "categoria" ? !exigeCategoria(c) : d.indexOf(k) < 0) return;
         var ok;
         if (k === "tipo") ok = c.tipo === "saiu" || c.tipo === "entrou" || c.tipo === "fatura";
         else if (k === "valor_centavos") ok = centavosDe(c) !== null;
@@ -262,6 +325,10 @@ var TelaLeitura = (function () {
       // fatura sempre pede o cartão, mesmo que o script não tenha listado
       if (c.tipo === "fatura" && c.cartao === "" && d.indexOf("cartao") < 0) f.push("o cartão");
       return f;
+    }
+    // O campo de categoria vale (e exige escolha) quando veio em dúvida ou quando veio com sugestão do histórico ou do modelo.
+    function exigeCategoria(c) {
+      return c.dados.duvidas.indexOf("categoria") >= 0 || !!c.dados.categoria_origem;
     }
     function nomeDoCartao(c) {
       var cent = centavosDe(c);
@@ -279,28 +346,32 @@ var TelaLeitura = (function () {
       return { opcoes: opcoes, hoje: env.hoje(), manter: { categoria: c.dados.categoria, forma: c.dados.forma } };
     }
 
-    function salvar(c) {
-      if (!aberto || c.estado !== "aberta" || c.salvando || faltas(c).length || !sessao) return;
+    // outroGasto: toque em "É outro gasto, salvar mesmo" (só então um possível duplicado é salvo).
+    // Devolve uma promessa (o lote salva uma linha de cada vez, na ordem). silencioso: no lote, o aviso e o desenho vêm no fim.
+    function salvar(c, outroGasto, silencioso) {
+      if (!aberto || c.estado !== "aberta" || c.salvando || faltas(c).length || !sessao) return Promise.resolve();
+      if (!outroGasto && acharParecido(c)) return Promise.resolve();
       c.salvando = true;
       c.erroSalvar = "";
-      sessao.salvarNovo(camposDoFormulario(c), contexto(c), { id: c.id, origem: "foto" }).then(function (r) {
+      return sessao.salvarNovo(camposDoFormulario(c), contexto(c), { id: c.id, origem: "foto" }).then(function (r) {
         c.salvando = false;
         if (!aberto) return;
         if (r.ignorado) return;
-        if (r.ok) { marcarSalva(c); return; }
+        if (r.ok) { marcarSalva(c, null, silencioso); return; }
         c.erroSalvar = r.banco ? (r.mensagem || "Não consegui guardar no celular.") : "Confira os dados. Toque em Corrigir para ver o que falta.";
-        pintar();
+        if (!silencioso) pintar();
       }).catch(function () {
         c.salvando = false;
         c.erroSalvar = "Não consegui guardar no celular.";
-        if (aberto) pintar();
+        if (aberto && !silencioso) pintar();
       });
     }
     // lanc: o que o formulário do Corrigir gravou (pode ter mudado valor e nome); sem ele vale o que o cartão mostra.
-    function marcarSalva(c, lanc) {
+    function marcarSalva(c, lanc, silencioso) {
       c.estado = "salva";
       var nome = lanc && typeof lanc.favorecido === "string" && Number.isInteger(lanc.valor_centavos) ? lanc.favorecido + ", " + Din.formatar(lanc.valor_centavos) : nomeDoCartao(c);
       c.resumo = "Salvo: " + nome;
+      if (silencioso) return;
       mostrarAvisoBaixo(env.online() !== false ? "Guardado e enviando…" : "Guardado. Vai para a planilha quando houver internet.");
       pintar();
     }
@@ -314,6 +385,37 @@ var TelaLeitura = (function () {
       if (c.estado !== "descartada") return;
       c.estado = "aberta";
       pintar();
+    }
+    // "Lançar mesmo assim": a linha que não contava vira cartão normal (com o que faltar no quadro âmbar).
+    function lancarMesmoAssim(c) {
+      if (c.estado !== "ignorada") return;
+      c.dados = Object.assign({}, c.dados, { sugestao: "lancar", motivo: "" });
+      c.estado = "aberta";
+      pintar();
+    }
+    // Lote (#101): só linha aberta, sem dúvida, sem duplicado ("lancar" já é toda linha aberta).
+    function validas() {
+      return cards.filter(function (c) { return c.estado === "aberta" && !c.salvando && faltas(c).length === 0 && !acharParecido(c); });
+    }
+    function salvarLote() {
+      if (!aberto || !sessao) return;
+      var lista = validas();
+      if (!lista.length) return;
+      var feitos = 0;
+      lista.reduce(function (p, c) {
+        return p.then(function () { return salvar(c, false, true); }).then(function () { if (c.estado === "salva") feitos++; });
+      }, Promise.resolve()).then(function () {
+        if (!aberto) return;
+        if (feitos) mostrarAvisoBaixo("Guardei " + feitos + (feitos === 1 ? " lançamento." : " lançamentos."));
+        pintar();
+      });
+    }
+    // "Descartar o resto": o que não foi salvo é esquecido; as linhas que não contam somem do painel. Nada é gravado.
+    function descartarResto() {
+      cards.forEach(function (c) {
+        if (c.estado === "aberta" && !c.salvando) { c.estado = "descartada"; c.resumo = "Descartada: " + nomeDoCartao(c); }
+        else if (c.estado === "ignorada") c.estado = "esquecida";
+      });
     }
     function corrigir(c) {
       if (!aberto || c.estado !== "aberta" || !env.corrigir) return;
@@ -330,8 +432,13 @@ var TelaLeitura = (function () {
     }
 
     // ---- desenho ----
+    function soltarSeletores() {
+      seletores.forEach(function (x) { x.destruir(); });
+      seletores = [];
+    }
     function pintar(focarTitulo) {
       if (!aberto) return;
+      soltarSeletores();
       raiz.textContent = "";
       var titulo = passo === "entendi" ? "O que entendi" : "Ler comprovante";
       var topo = el("header", "form-topo");
@@ -499,21 +606,86 @@ var TelaLeitura = (function () {
     // ---- O que entendi ----
     function abertas() { return cards.filter(function (c) { return c.estado === "aberta"; }); }
     function pintarEntendi(corpo) {
+      lote = null;
       var meta = el("div", "meta");
       var mt = el("div", "meta-txt");
       if (documento === "extrato") {
-        mt.append(el("p", "conta", "Li um extrato"), el("p", "apoio", cards.length + (cards.length === 1 ? " lançamento para conferir." : " lançamentos para conferir.")));
+        var ign = cards.filter(function (c) { return c.estado === "ignorada"; }).length;
+        var lanc = cards.filter(function (c) { return c.estado !== "ignorada" && c.estado !== "esquecida"; }).length;
+        var frase = lanc + (lanc === 1 ? " lançamento para conferir" : " lançamentos para conferir");
+        if (ign) frase += " e " + ign + (ign === 1 ? " linha que não conta" : " linhas que não contam");
+        mt.append(el("p", "conta", "Li um extrato"), el("p", "apoio", frase + "."));
       } else {
         mt.append(el("p", "conta", "Li 1 comprovante"), el("p", "apoio", "Confira os dados e escolha o que fazer."));
       }
       meta.appendChild(mt);
       corpo.appendChild(meta);
+      if (cortado) {
+        var res = el("div", "res");
+        res.setAttribute("data-tom", "atencao");
+        res.setAttribute("id", "ler-cortado");
+        var tx = el("div");
+        tx.append(el("b", "", "O extrato tem mais linhas; mande o resto em outro arquivo."), el("span", "", "Aqui estão as " + cards.length + " primeiras."));
+        res.append(icone("i-atencao"), tx);
+        corpo.appendChild(res);
+      }
       corpo.appendChild(nota("i-info", "Confira antes de salvar. O Zelo pode errar ao ler."));
       cards.forEach(function (c) {
-        corpo.appendChild(c.estado === "aberta" ? pintarCard(c) : pintarFeita(c));
+        if (c.estado === "aberta") corpo.appendChild(pintarCard(c));
+        else if (c.estado === "salva" || c.estado === "descartada") corpo.appendChild(pintarFeita(c));
       });
+      var painel = pintarIgnoradas();
+      if (painel) corpo.appendChild(painel);
       if (abertas().length === 0) corpo.appendChild(pintarPronto());
-      return null;
+      return pintarLote();
+    }
+
+    // Painel recolhido das linhas que não contam (#101). Nada aqui é gravado.
+    function pintarIgnoradas() {
+      var lista = cards.filter(function (c) { return c.estado === "ignorada"; });
+      if (!lista.length) return null;
+      var d = el("details", "instalar ll-ign");
+      d.setAttribute("id", "ler-ignoradas");
+      d.open = painelAberto;
+      d.addEventListener("toggle", function () { painelAberto = d.open === true; });
+      var sm = el("summary");
+      sm.append(el("span", "", "Linhas que não contam (" + lista.length + ")"), icone("i-seta-baixo"));
+      d.appendChild(sm);
+      var ul = el("ul");
+      lista.forEach(function (c) {
+        var li = el("li");
+        var cent = centavosDe(c);
+        var m = MOTIVO[c.dados.motivo] || MOTIVO_OUTRO;
+        var fav = c.favorecido.trim();
+        li.append(
+          fav ? el("p", "lan-titulo", fav) : (function () { var p = el("p", "lan-titulo"); p.appendChild(el("span", "ll-vazio", "Sem nome")); return p; })(),
+          el("p", "lan-sub", (c.data ? Dat.paraTela(c.data) : "sem data") + " · " + (cent === null ? "—" : Din.formatar(cent))),
+          nota(m[0], m[1], "res-nota"),
+          botao("Lançar mesmo assim", "btn-link", function () { lancarMesmoAssim(c); }, "ler-lancar-mesmo-" + c.n)
+        );
+        ul.appendChild(li);
+      });
+      d.appendChild(ul);
+      return d;
+    }
+
+    // Rodapé do lote: só com 2 ou mais linhas ainda por decidir.
+    function pintarLote() {
+      if (abertas().length < 2) return null;
+      var rodape = el("footer", "form-rodape ll-lote");
+      var salvarTodas = botao("", "btn-p", salvarLote, "ler-lote-salvar");
+      var resto = botao("Descartar o resto", "btn-sec", function () { folha = "resto"; pintar(); }, "ler-lote-resto");
+      rodape.append(salvarTodas, resto);
+      lote = { salvar: salvarTodas };
+      sincronizarLote();
+      return rodape;
+    }
+    function sincronizarLote() {
+      if (!lote) return;
+      var n = validas().length;
+      lote.salvar.textContent = "";
+      lote.salvar.append(el("span", "", n ? "Salvar todas as válidas (" + n + ")" : "Nenhuma linha está pronta para salvar de uma vez."));
+      lote.salvar.disabled = n === 0;
     }
 
     function pintarFeita(c) {
@@ -555,7 +727,7 @@ var TelaLeitura = (function () {
     function textoCategoria(c) {
       if (c.categoria === SEM_CATEGORIA) return "Sem categoria";
       if (c.categoria !== "") return c.categoria;
-      return c.dados.duvidas.indexOf("categoria") >= 0 ? null : "Sem categoria";
+      return exigeCategoria(c) ? null : "Sem categoria";
     }
 
     function pintarCard(c) {
@@ -576,7 +748,7 @@ var TelaLeitura = (function () {
       topo.append(ui.ic, txt, ui.din);
       art.appendChild(topo);
       // detalhes
-      var compacto = cards.length > 1;
+      var compacto = documento === "extrato" || cards.length > 1;
       if (compacto) {
         ui.sub = el("p", "lan-sub");
         txt.appendChild(ui.sub);
@@ -595,6 +767,9 @@ var TelaLeitura = (function () {
       ui.quadro = pintarQuadro(c);
       if (ui.quadro) art.appendChild(ui.quadro);
       // ações
+      ui.dup = el("div", "ll-dup");
+      ui.dupId = null;
+      art.appendChild(ui.dup);
       var acoes = el("div", "ll-acoes");
       ui.salvar = botao(c.salvando ? "Salvando…" : "Salvar", "btn-p", function () { salvar(c); }, "ler-salvar-" + c.n);
       acoes.append(ui.salvar,
@@ -648,17 +823,50 @@ var TelaLeitura = (function () {
         ui.quadroTitulo.textContent = "";
         ui.quadroTitulo.append(icone(pronto ? "i-ok" : "i-atencao"), el("span", "", pronto ? "Tudo preenchido. Confira antes de salvar." : "Preencha o que não consegui ler"));
       }
-      ui.salvar.disabled = f.length > 0 || c.salvando;
-      var msg = c.erroSalvar || (f.length ? "Falta preencher: " + f.join(", ") + "." : "");
+      var parecido = acharParecido(c);
+      sincronizarDup(c, parecido, f.length > 0);
+      ui.salvar.disabled = f.length > 0 || c.salvando || !!parecido;
+      var msg = c.erroSalvar || (f.length ? "Falta preencher: " + f.join(", ") + "." : "") ||
+        (parecido ? "Já existe um lançamento parecido. Se for outro gasto, use o botão acima." : "");
       ui.falta.textContent = "";
       ui.falta.hidden = msg === "";
       if (msg) ui.falta.append(icone("i-atencao"), el("span", "", msg));
+      sincronizarLote();
+    }
+    // Aviso "Parece com este lançamento" (#100). Só refaz o desenho quando o lançamento parecido muda (o teclado não fecha).
+    function sincronizarDup(c, parecido, faltaCampo) {
+      var ui = c.ui;
+      var id = parecido ? parecido.id : null;
+      if (id !== ui.dupId) {
+        ui.dupId = id;
+        ui.dup.textContent = "";
+        ui.dupBotao = null;
+        if (parecido) {
+          var box = el("div", "ll-aviso");
+          box.setAttribute("id", "ler-dup-" + c.n);
+          var t = el("p", "ll-aviso-t");
+          t.append(icone("i-atencao"), el("span", "", "Parece com este lançamento"));
+          var par = el("div", "ll-parecido");
+          var q = el("div");
+          q.append(el("p", "lan-titulo", parecido.favorecido || "Sem nome"), el("p", "lan-sub", Dat.paraTela(parecido.data)));
+          var din = el("span", "din");
+          din.setAttribute("data-tipo", parecido.tipo || "");
+          var cent = parecido.valor_centavos;
+          din.appendChild(el("b", "din-v", parecido.tipo === "saiu" || parecido.tipo === "entrou" ? Ver_.dinheiro(parecido.tipo, cent) : Din.formatar(cent)));
+          par.append(q, din);
+          ui.dupBotao = botao("É outro gasto, salvar mesmo", "btn-sec btn-atencao", function () { salvar(c, true); }, "ler-outro-gasto-" + c.n);
+          box.append(t, par, ui.dupBotao);
+          ui.dup.appendChild(box);
+        }
+      }
+      if (ui.dupBotao) ui.dupBotao.disabled = faltaCampo || c.salvando;
     }
     function art_tipo(art, tipo) { art.setAttribute("data-tipo", tipo || ""); }
 
     function pintarQuadro(c) {
       var d = c.dados.duvidas.slice();
       if (c.dados.tipo === "fatura" && d.indexOf("cartao") < 0) d.push("cartao");
+      if (c.dados.categoria_origem && d.indexOf("categoria") < 0) d.push("categoria");
       if (!d.length) return null;
       var q = el("div", "ll-aviso");
       var t = el("p", "ll-aviso-t");
@@ -743,20 +951,14 @@ var TelaLeitura = (function () {
         }));
       }
       if (d.indexOf("categoria") >= 0) {
-        q.appendChild(campoTexto("categoria", "Categoria", "", function () {
-          var linha = el("div", "campo-linha");
-          var s = doc.createElement("select");
-          s.setAttribute("id", pre + "categoria");
-          [["", "Escolha…"], [SEM_CATEGORIA, "Sem categoria"]].concat(((opcoes && opcoes.categorias) || []).map(function (x) { return [x, x]; })).forEach(function (o) {
-            var op = el("option", "", o[1]);
-            op.value = o[0];
-            s.appendChild(op);
-          });
-          s.value = c.categoria;
-          s.addEventListener("change", function () { c.categoria = s.value; mudou(); });
-          linha.appendChild(s);
-          return linha;
-        }));
+        var sel = Sel.criar({
+          doc: doc, id: pre, categorias: opcoes ? opcoes.categorias : null, usadas: usadas, valor: c.categoria,
+          sugerida: c.dados.categoria, origem: c.dados.categoria_origem, duvida: c.dados.duvidas.indexOf("categoria") >= 0,
+          carregando: buscandoCategorias, aoTentarDeNovo: buscarCategorias,
+          aoMudar: function (v) { c.categoria = v; mudou(); }
+        });
+        seletores.push(sel);
+        q.appendChild(sel.raiz);
       }
       if (d.indexOf("cartao") >= 0) {
         q.appendChild(campoTexto("cartao", "Qual cartão?", "", function () {
@@ -785,13 +987,17 @@ var TelaLeitura = (function () {
       f.setAttribute("role", "alertdialog");
       f.setAttribute("aria-modal", "true");
       f.setAttribute("aria-labelledby", "ler-folha-t");
-      var h2 = el("h2", "", "Descartar o que li?");
+      var resto = folha === "resto";
+      var h2 = el("h2", "", resto ? "Descartar as linhas que sobraram?" : "Descartar o que li?");
       h2.setAttribute("id", "ler-folha-t");
       h2.setAttribute("tabindex", "-1");
       var bs = el("div", "botoes");
       bs.append(
         botao("Continuar conferindo", "btn-p", function () { folha = null; pintar(); }, "ler-continuar"),
-        botao("Descartar", "btn-sec btn-atencao", function () { folha = null; env.sair(); }, "ler-descartar-sim")
+        botao(resto ? "Descartar o resto" : "Descartar", "btn-sec btn-atencao", function () {
+          folha = null;
+          if (resto) { descartarResto(); pintar(true); } else env.sair();
+        }, "ler-descartar-sim")
       );
       f.append(h2, el("p", "", "As linhas que você ainda não salvou serão esquecidas. O que já foi salvo continua guardado."), bs);
       fundo.appendChild(f);
@@ -817,12 +1023,16 @@ var TelaLeitura = (function () {
       emFormulario = false;
       geracao++;
       soltar();
+      soltarSeletores();
       raiz.textContent = ""; // nada do que foi lido fica na tela
       raiz.hidden = true;
     }
     function mexeu() { return aberto && passo === "entendi" && abertas().length > 0; }
     function pedirSaida() {
       if (!aberto) return;
+      // "Voltar" com a lista de categorias aberta só fecha a lista
+      var lista = seletores.filter(function (x) { return x.aberto(); });
+      if (lista.length) { lista.forEach(function (x) { x.fechar(); }); return; }
       if (folha) { folha = null; pintar(); return; }
       if (mexeu()) { folha = "sair"; pintar(); return; }
       env.sair();
