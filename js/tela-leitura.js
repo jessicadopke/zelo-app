@@ -27,7 +27,8 @@ var TelaLeitura = (function () {
     saldo: ["i-info", "Saldo do dia: não é um lançamento"],
     cabecalho: ["i-info", "Título do extrato: não é um lançamento"],
     total: ["i-info", "Total do extrato: não é um lançamento"],
-    rendimento_zero: ["i-info", "Rendimento zerado: nada a lançar"]
+    rendimento_zero: ["i-info", "Rendimento zerado: nada a lançar"],
+    aplicacao_automatica: ["i-info", "Aplicação ou resgate automático: nada a lançar"]
   };
   var MOTIVO_OUTRO = ["i-info", "Parece que não é um lançamento"];
 
