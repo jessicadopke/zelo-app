@@ -1,6 +1,6 @@
 // Zelo: núcleo do app. Navegação por abas, tema e cópia offline. O conteúdo das telas vem nas próximas partes.
 // Depende de js/rotas.js (Rotas) e js/tema.js (Tema), carregados antes no index.html.
-const APP_VERSION = "0.10.1";
+const APP_VERSION = "0.11.0";
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
