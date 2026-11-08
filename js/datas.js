@@ -39,6 +39,21 @@ var Datas = (function () {
     return m ? m[3] + "/" + m[2] + "/" + m[1] : "";
   }
 
+  var MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+  // "2030-01-20" -> "20 de janeiro de 2030". Data inválida -> "".
+  function porExtenso(iso) {
+    if (!valida(iso)) return "";
+    return Number(iso.slice(8, 10)) + " de " + MESES[Number(iso.slice(5, 7)) - 1] + " de " + iso.slice(0, 4);
+  }
+
+  // Quantos dias de "de" até "ate" (ambos AAAA-MM-DD; negativo se "ate" é antes). Data inválida -> null.
+  function diasEntre(de, ate) {
+    if (!valida(de) || !valida(ate)) return null;
+    var ms = function (t) { return Date.UTC(Number(t.slice(0, 4)), Number(t.slice(5, 7)) - 1, Number(t.slice(8, 10))); };
+    return Math.round((ms(ate) - ms(de)) / 86400000);
+  }
+
   // Data local do celular (não UTC).
   function hoje(agora) {
     var d = agora || new Date();
@@ -68,6 +83,6 @@ var Datas = (function () {
     return { de: ym + "-01", ate: ym + "-" + pad(diasNoMes(a, m)) };
   }
 
-  return { valida: valida, deTexto: deTexto, paraTela: paraTela, hoje: hoje, agoraIso: agoraIso, mes: mes, mesAnterior: mesAnterior, mesSeguinte: mesSeguinte, dosDoMes: dosDoMes };
+  return { valida: valida, deTexto: deTexto, paraTela: paraTela, porExtenso: porExtenso, diasEntre: diasEntre, hoje: hoje, agoraIso: agoraIso, mes: mes, mesAnterior: mesAnterior, mesSeguinte: mesSeguinte, dosDoMes: dosDoMes };
 })();
 if (typeof module !== "undefined") module.exports = Datas;

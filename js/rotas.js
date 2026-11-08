@@ -42,9 +42,10 @@ var Rotas = (function () {
     var m = /^editar\/([0-9A-Za-z-]{1,64})$/.exec(h);
     return m ? { tipo: "editar", id: m[1] } : null;
   }
-  // Tela dentro do Início (a barra de baixo continua marcando "Início"): "#reserva" -> "reserva". O resto -> null.
+  // Tela dentro do Início (a barra de baixo continua marcando "Início"): "#reserva" -> "reserva", "#contas" -> "contas". O resto -> null.
   function subtelaDoHash(hash) {
-    return String(hash || "").replace(/^#/, "") === "reserva" ? "reserva" : null;
+    var h = String(hash || "").replace(/^#/, "");
+    return h === "reserva" || h === "contas" ? h : null;
   }
   return { subtelaDoHash: subtelaDoHash, ABAS: ABAS, PADRAO: PADRAO, abaDoHash: abaDoHash, telaDoHash: telaDoHash, rotulo: rotulo, titulo: titulo, direcao: direcao };
 })();

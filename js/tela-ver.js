@@ -9,6 +9,7 @@ var TelaVer = (function () {
   var Fil = typeof Fila !== "undefined" ? Fila : require("./fila.js");
   var Opc = typeof Opcoes !== "undefined" ? Opcoes : require("./opcoes.js");
   var Res = typeof Reserva !== "undefined" ? Reserva : require("./reserva.js");
+  var Con = typeof Contas !== "undefined" ? Contas : require("./contas.js");
 
   var SVG_NS = "http://www.w3.org/2000/svg";
   var CINCO_MIN = 5 * 60 * 1000;
@@ -20,7 +21,7 @@ var TelaVer = (function () {
   var SEM_FILTRO = { categoria: undefined, pessoa: undefined, cartao: undefined };
 
   // env: { pronto: Promise<{ db, controle } | null>, hoje(), online(), agora(), agendar(fn, ms), cancelar(t), doc,
-  //        ir(aba), novo(), editar(id), pagarFatura(cartao), reserva(), conferir(lugar), marcas (opcional: Alterado.criarMarcas(), a marca "alterado no outro celular") }
+  //        ir(aba), novo(), editar(id), pagarFatura(cartao), reserva(), contas(), conferir(lugar), marcas (opcional: Alterado.criarMarcas(), a marca "alterado no outro celular") }
   function criar(env) {
     var doc = env.doc || document;
     var agora = env.agora || function () { return new Date().getTime(); };
@@ -169,10 +170,17 @@ var TelaVer = (function () {
     function lerInicio() {
       var m = Dat.mes(env.hoje());
       var v0 = versao;
-      return Promise.all([Lan.listar(ctx.db, m), lerLigacao(), Lan.todosVisiveis(ctx.db), lerOpcoes()]).then(function (v) {
-        dadosIni = { id: ++contador, mes: m, versao: v0, lista: v[0], lig: v[1], todos: v[2], cartoesConfig: cartoesDe(v[3]), opcoes: v[3] };
+      return Promise.all([Lan.listar(ctx.db, m), lerLigacao(), Lan.todosVisiveis(ctx.db), lerOpcoes(), lerContas()]).then(function (v) {
+        dadosIni = { id: ++contador, mes: m, versao: v0, lista: v[0], lig: v[1], todos: v[2], cartoesConfig: cartoesDe(v[3]), opcoes: v[3], contas: v[4] };
         return dadosIni;
       });
+    }
+    // Contas a pagar (#120): só a cópia local, para o cartão do Início. Sem a loja (arquivos de versões misturadas) ou com erro: sem cartão de números.
+    function lerContas() {
+      if (!ctx.db.contas) return Promise.resolve(null);
+      return Promise.all([ctx.db.contas.todas(), ctx.db.config.obter("ultima_leitura_contas")]).then(function (v) {
+        return Con.resumo(v[0] || [], env.hoje(), v[1]);
+      }, function () { return null; });
     }
     function mesAtual() { if (mes === null) mes = Dat.mes(env.hoje()); return mes; }
     function limites() { return Ver_.mesesDisponiveis(dadosMes ? dadosMes.todos : [], env.hoje()); }
@@ -571,6 +579,27 @@ var TelaVer = (function () {
       }
       return sec;
     }
+    // ---- cartão "Contas a pagar" (Início, #120): sempre presente, abre a tela #contas ----
+    function cartaoContas(r) {
+      var tx = Con.textoEntrada(r || { vencidas: 0, aPagar: 0, pagas: 0, lida: false });
+      var a = link("contas-entrada", "#contas", "", function () { if (env.contas) env.contas(); });
+      a.setAttribute("data-foco", "contas");
+      var circulo = el("span", "contas-entrada-ic");
+      circulo.appendChild(ic("i-contas"));
+      var txt = el("div", "contas-entrada-txt");
+      txt.appendChild(el("p", "contas-entrada-tit", "Contas a pagar"));
+      if (tx.marca) {
+        var m = el("div");
+        var pil = el("span", "contas-marca");
+        pil.append(ic("i-atencao"), tx.marca);
+        m.appendChild(pil);
+        txt.appendChild(m);
+      }
+      if (tx.sub) txt.appendChild(el("p", "contas-entrada-sub", tx.sub));
+      a.append(circulo, txt, ic("i-seta-dir", "contas-entrada-seta"));
+      return a;
+    }
+
     // ---- painel "Onde está o dinheiro" (Início, #39 P5): conta, guardado, cartões e patrimônio ----
     function dinOnde(estado, palavra, valor, comIcone) {
       var sp = el("span", "din");
@@ -785,6 +814,7 @@ var TelaVer = (function () {
           raiz.appendChild(a);
         }
       }
+      raiz.appendChild(cartaoContas(d.contas));
       var onde = blocoOnde(d);
       if (onde) raiz.appendChild(onde);
       var cini = blocoCartoesIni(d);
@@ -864,6 +894,7 @@ var TelaVer = (function () {
       if (!c) return;
       ctx = c;
       desligar.push(Fil.aoMudar(aoAviso));
+      desligar.push(Con.aoMudar(function () { aoAviso("terminou"); })); // a cópia das contas mudou: o cartão do Início acompanha
       if (c.controle && typeof c.controle.aoSincronia === "function") {
         desligar.push(c.controle.aoSincronia(aplicarSync));
         if (typeof c.controle.sincronia === "function") aplicarSync(c.controle.sincronia());

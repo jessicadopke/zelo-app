@@ -845,3 +845,45 @@ a.onde-linha > .onde-seta { align-self: center; width: 20px; height: 20px; color
 .conf-resultado .nota-ic { margin: 0; }
 .nota-valor { color: var(--fg); font-weight: var(--w-forte); white-space: nowrap; }
 .lan-ajuste, .lan-dentro { white-space: normal; }
+
+/* ================= NOVO NO APP · contas a pagar ================= */
+/* Nenhum token novo, nenhuma cor solta. Um ícone novo (i-contas) no index.html. */
+
+/* ---- Início: cartão de entrada "Contas a pagar" (link para #contas) ---- */
+.contas-entrada { display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px; gap: var(--sp-1) var(--sp-3); align-items: center; min-height: 64px; margin: 0 0 var(--sp-3); padding: var(--sp-3) var(--sp-4); background: var(--surface); border-radius: var(--r-cartao); box-shadow: var(--sh); color: inherit; text-decoration: none; -webkit-tap-highlight-color: transparent; }
+.contas-entrada:active { background: var(--accent-soft); }
+.contas-entrada:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.contas-entrada-ic { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--r-pilula); background: var(--accent-soft); color: var(--accent); }
+.contas-entrada-ic .ic { width: 20px; height: 20px; }
+.contas-entrada-txt { min-width: 0; }
+.contas-entrada-tit { margin: 0; font-size: var(--t-b); font-weight: var(--w-forte); line-height: 1.3; }
+.contas-entrada-sub { margin: 2px 0 0; color: var(--muted); font-size: var(--t-s); line-height: 1.4; }
+.contas-entrada-seta { width: 20px; height: 20px; color: var(--accent); }
+.contas-marca { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; margin-top: var(--sp-1); padding: 0 var(--sp-3); border-radius: var(--r-pilula); background: var(--alerta-bg); color: var(--alerta); border: 1.5px solid var(--alerta); font-size: var(--t-s); font-weight: var(--w-forte); line-height: 1.2; }
+.contas-marca .ic { width: 16px; height: 16px; }
+
+/* ---- Tela cheia #contas (usa .reserva-cab, .meta, .btn-atualizar, .faixa, .cartao do app) ---- */
+.tela .faixa.contas-aviso { margin: 0 0 var(--sp-3); }
+.contas-atualizado { display: flex; align-items: center; gap: var(--sp-1); }
+.contas-atualizado .ic { width: 16px; height: 16px; flex: none; }
+.contas-atualizado[data-velho] { color: var(--alerta); font-weight: var(--w-forte); }
+.contas-sec { margin: 0 0 var(--sp-4); }
+.contas-sec > h2 { display: flex; align-items: center; gap: var(--sp-2); margin: 0 0 var(--sp-1); font-size: var(--t-l); font-weight: var(--w-forte); line-height: 1.3; }
+.contas-sec > h2 > .ic { width: 20px; height: 20px; color: var(--alerta); }
+.contas-sec > .apoio { margin: 0 0 var(--sp-2); }
+.contas-n { display: inline-grid; place-items: center; min-width: 28px; height: 28px; padding: 0 var(--sp-2); border-radius: var(--r-pilula); background: var(--accent-soft); color: var(--fg); font-size: var(--t-s); font-weight: var(--w-forte); }
+.contas-sec[data-grupo="vencidas"] .contas-n { background: var(--alerta-bg); color: var(--alerta); }
+.contas-lista { list-style: none; margin: 0; padding: 0; background: var(--surface); border-radius: var(--r-cartao); box-shadow: var(--sh); overflow: hidden; }
+.contas-lista > li + li { border-top: 1px solid var(--line); }
+.conta { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-1) var(--sp-3); align-items: start; min-height: 64px; padding: var(--sp-3) var(--sp-4); }
+.conta-txt { min-width: 0; }
+.conta-fav { margin: 0; font-size: var(--t-b); font-weight: var(--w-forte); line-height: 1.3; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.conta-sub { margin: 2px 0 0; color: var(--muted); font-size: var(--t-s); line-height: 1.4; overflow-wrap: anywhere; }
+.conta-prazo { display: flex; align-items: center; gap: var(--sp-1); margin: 2px 0 0; color: var(--fg); font-size: var(--t-s); font-weight: var(--w-forte); line-height: 1.4; }
+.conta-prazo .ic { width: 16px; height: 16px; }
+.conta-prazo[data-tom="vencida"] { color: var(--alerta); }
+.conta > .din[data-tipo="vencida"] { color: var(--alerta); }
+.conta > .din[data-tipo="paga"] .din-p .ic { color: var(--accent); }
+.conta .din-v { font-size: var(--t-l); line-height: 1.25; }
+.contas-mais { margin-top: var(--sp-3); }
+.contas-sec .res-nota { margin: var(--sp-2) 0 0; }

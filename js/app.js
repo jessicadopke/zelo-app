@@ -1,6 +1,6 @@
 // Zelo: núcleo do app. Navegação por abas, tema e cópia offline. O conteúdo das telas vem nas próximas partes.
 // Depende de js/rotas.js (Rotas) e js/tema.js (Tema), carregados antes no index.html.
-const APP_VERSION = "0.11.0";
+const APP_VERSION = "0.12.0";
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -40,13 +40,16 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   // ---- navegação ----
   let atual = null;
   let reservaAberta = false; // tela da Reserva (#reserva), que mora dentro do Início
-  let telaReserva = null, telaMov = null, telaLeitura = null; // criadas mais abaixo
+  let contasAberta = false; // tela de Contas a pagar (#contas), também dentro do Início
+  let telaReserva = null, telaMov = null, telaLeitura = null, telaContas = null; // criadas mais abaixo
+  const subAtual = () => (reservaAberta ? "reserva" : contasAberta ? "contas" : null);
   const aoMostrar = []; // funções chamadas com o id da aba que acabou de aparecer
 
   function mostrar(id) {
     const antes = atual;
     atual = id;
     if (reservaAberta && id !== "inicio") fecharReservaTela();
+    if (contasAberta && id !== "inicio") fecharContasTela();
     const dir = antes ? Rotas.direcao(antes, id) : null;
     $$(".tela").forEach((t) => {
       t.hidden = t.dataset.tela !== id;
@@ -71,7 +74,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
 
   function ir(id) {
     if (id === atual) {
-      if (id === "inicio" && reservaAberta) history.back(); // "Início" tocado dentro da Reserva volta ao Início
+      if (id === "inicio" && (reservaAberta || contasAberta)) history.back(); // "Início" tocado dentro da Reserva ou das Contas volta ao Início
       return;
     }
     history.pushState({ aba: id }, "", "#" + id);
@@ -100,6 +103,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     $("#faixa-semnet").hidden = navigator.onLine !== false;
     if (telaVer) telaVer.rede();
     if (telaReserva) telaReserva.rede();
+    if (telaContas) telaContas.rede();
     if (telaLeitura) telaLeitura.rede();
   }
   window.addEventListener("online", atualizarRede);
@@ -204,7 +208,10 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
         })
         : null;
       // Depois de enviar e receber sem parar, baixa as opções da planilha (sem bloquear nada; se falhar, vale a cópia do celular).
-      const aoSincronizar = ponte && typeof Opcoes !== "undefined" ? () => { Opcoes.atualizar(db, ponte); } : null;
+      // As contas a pagar também: leitura barata (só o que mudou), sem bloquear nada e sem aviso de erro (vale a cópia).
+      const aoSincronizar = ponte && typeof Opcoes !== "undefined"
+        ? () => { Opcoes.atualizar(db, ponte); if (typeof Contas !== "undefined") Contas.receber(db, ponte); }
+        : null;
       controle = Indicador.criar({ db: db, ponte: ponte, janela: window, pintar: pintar, aoSincronizar: aoSincronizar });
       controle.iniciar();
       return { db: db, ponte: ponte, controle: controle };
@@ -299,7 +306,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   function formAtivo() { return telaLancar && telaLancar.aberto() ? telaLancar : telaMov && telaMov.aberto() ? telaMov : null; }
   function empurrar(hash) {
     hashDaTela = hash;
-    history.pushState({ aba: atual, tela: true, sub: reservaAberta ? "reserva" : null }, "", hash);
+    history.pushState({ aba: atual, tela: true, sub: subAtual() }, "", hash);
   }
   // Abre o formulário certo para a rota: Novo, Editar (o tipo do lançamento escolhe o editor) ou um dos da Reserva.
   function abrirPorRota(t, memoria) {
@@ -406,6 +413,43 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     history.pushState({ aba: "inicio", sub: "reserva" }, "", "#reserva");
     abrirReservaTela();
   }
+  // ---- Contas a pagar: tela dentro do Início (#contas), mesmo jeito da Reserva ----
+  const contasEl = $("#contas-tela");
+  function abrirContasTela() {
+    if (contasAberta || !contasEl || !telaContas) return;
+    contasAberta = true;
+    principalEl.hidden = true;
+    contasEl.hidden = false;
+    document.title = "Contas a pagar · Zelo";
+    telaContas.abrir();
+  }
+  function fecharContasTela(foco) {
+    if (!contasAberta) return;
+    contasAberta = false;
+    contasEl.hidden = true;
+    principalEl.hidden = false;
+    document.title = Rotas.titulo(atual || "inicio");
+    telaContas.fechar();
+    if (foco) {
+      const alvo = $('[data-foco="contas"]');
+      if (alvo && alvo.focus) alvo.focus({ preventScroll: true });
+    }
+  }
+  function abrirContas() {
+    if (contasAberta || reservaAberta || atual !== "inicio" || !telaContas) return;
+    history.pushState({ aba: "inicio", sub: "contas" }, "", "#contas");
+    abrirContasTela();
+  }
+  telaContas = typeof TelaContas !== "undefined" && typeof Contas !== "undefined" && contasEl
+    ? TelaContas.criar({
+      pronto: pronto,
+      hoje: () => Datas.hoje(),
+      online: () => navigator.onLine !== false,
+      agora: () => Date.now(),
+      sair: () => history.back(),
+    })
+    : null;
+
   telaReserva = typeof TelaReserva !== "undefined" && typeof Reserva !== "undefined" && reservaEl
     ? TelaReserva.criar({
       pronto: pronto,
@@ -438,6 +482,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
       pagarFatura: (cartao) => abrirTelaLancar({ tipo: "novo", fatura: cartao }, "#novo"),
       editar: (id) => abrirTelaLancar({ tipo: "editar", id: id }, "#editar/" + encodeURIComponent(id)),
       reserva: () => abrirReserva(),
+      contas: () => abrirContas(),
       conferir: (lugar) => abrirMovimento({ tipo: "conferir", lugar: lugar }, "#conferir"),
     });
     aoMostrar.push((id) => telaVer.mostrar(id));
@@ -454,7 +499,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
       if (algumFormAberto()) {
         const ativo = formAtivo();
         if (!saindoDeVez && ativo.mexeu()) {
-          history.pushState({ aba: atual, tela: true, sub: reservaAberta ? "reserva" : null }, "", "#novo");
+          history.pushState({ aba: atual, tela: true, sub: subAtual() }, "", "#novo");
           ativo.pedirSaida();
           return;
         }
@@ -475,7 +520,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     const ativo = formAtivo();
     if (ativo) {
       if (!saindoDeVez && ativo.mexeu()) {
-        history.pushState({ aba: atual, tela: true, sub: reservaAberta ? "reserva" : null }, "", hashDaTela);
+        history.pushState({ aba: atual, tela: true, sub: subAtual() }, "", hashDaTela);
         ativo.pedirSaida();
         return;
       }
@@ -484,7 +529,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     }
     if (lerAberta) {
       if (!saindoDeVez && telaLeitura.mexeu()) {
-        history.pushState({ aba: atual, tela: true, sub: reservaAberta ? "reserva" : null }, "", "#ler");
+        history.pushState({ aba: atual, tela: true, sub: subAtual() }, "", "#ler");
         telaLeitura.pedirSaida();
         return;
       }
@@ -493,13 +538,19 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     saindoDeVez = false;
     const aba = Rotas.abaDoHash(location.hash);
     if (aba !== atual) mostrar(aba);
-    const sub = history.state && history.state.sub === "reserva" ? "reserva" : null;
-    if (sub === "reserva" && atual === "inicio") abrirReservaTela();
-    else if (reservaAberta) fecharReservaTela(true);
+    const sub = history.state && (history.state.sub === "reserva" || history.state.sub === "contas") ? history.state.sub : null;
+    if (sub === "reserva" && atual === "inicio") { if (contasAberta) fecharContasTela(); abrirReservaTela(); }
+    else if (sub === "contas" && atual === "inicio") { if (reservaAberta) fecharReservaTela(); abrirContasTela(); }
+    else {
+      if (reservaAberta) fecharReservaTela(true);
+      if (contasAberta) fecharContasTela(true);
+    }
   });
   // Aberto direto por #novo, #editar/<id>, #reserva/... ou #conferir (por exemplo, ao recarregar): a aba fica por baixo.
   const telaInicial = Rotas.telaDoHash(hashInicial);
-  if (Rotas.subtelaDoHash(hashInicial)) abrirReserva();
+  const subInicial = Rotas.subtelaDoHash(hashInicial);
+  if (subInicial === "reserva") abrirReserva();
+  else if (subInicial === "contas") abrirContas();
   else if (telaInicial && telaInicial.tipo === "ler") abrirLer();
   else if (telaInicial) abrirTelaLancar(telaInicial, hashInicial);
 

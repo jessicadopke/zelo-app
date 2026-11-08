@@ -1,14 +1,16 @@
-// Zelo: banco local no celular (IndexedDB "zelo", versão 1). Só guarda; as regras da fila são de js/fila.js.
+// Zelo: banco local no celular (IndexedDB "zelo", versão 2). Só guarda; as regras da fila são de js/fila.js.
 // Nada de DOM nem de rede. No navegador vira o objeto global Db; a "fábrica" é o indexedDB (nos testes, um falso em memória).
 // Atenção: url_ponte e codigo_aparelho (loja config) são dados do aparelho: nunca vão para arquivo versionado nem para teste com valor real.
 var Db = (function () {
   var NOME = "zelo";
-  var VERSAO = 1;
+  var VERSAO = 2;
 
   var CAMPOS_REGISTRO = ["id", "data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "origem", "apagado", "editado_em", "cartao", "caixinha"];
   var CAMPOS_LANCAMENTO = CAMPOS_REGISTRO.concat(["atualizado_em", "situacao", "motivo_recusa"]);
   var CAMPOS_FILA = ["seq", "id", "registro", "entrou_em"];
-  var CHAVES_CONFIG = ["proximo_desde", "url_ponte", "codigo_aparelho", "ultimo_envio_em", "ia_gasto_centavos", "ia_teto_centavos", "ia_mes"];
+  // Contas a pagar (#120): só os 10 campos da seção 4A do contrato; a cópia local nunca guarda mais que isso.
+  var CAMPOS_CONTA = ["id", "vencimento", "valor_centavos", "favorecido", "categoria", "pessoa", "situacao", "lancamento_id", "recebido_em", "atualizado_em"];
+  var CHAVES_CONFIG = ["proximo_desde", "url_ponte", "codigo_aparelho", "ultimo_envio_em", "ia_gasto_centavos", "ia_teto_centavos", "ia_mes", "proximo_desde_contas", "ultima_leitura_contas"];
 
   var MENSAGENS = {
     sem_espaco: "Não consegui guardar no celular. Falta espaço.",
@@ -82,6 +84,18 @@ var Db = (function () {
           return pedir(tx.objectStore("categorias").get("lista")).then(function (r) { return r ? r.valor : null; });
         },
       },
+      contas: {
+        gravar: function (conta) {
+          soCampos(conta, CAMPOS_CONTA, "contas");
+          return pedir(tx.objectStore("contas").put(copia(conta))).then(function () { return undefined; });
+        },
+        obter: function (id) {
+          return pedir(tx.objectStore("contas").get(id)).then(function (r) { return r === undefined ? null : r; });
+        },
+        todas: function () {
+          return pedir(tx.objectStore("contas").getAll());
+        },
+      },
       config: {
         obter: function (chave) {
           return pedir(tx.objectStore("config").get(chave)).then(function (r) { return r ? r.valor : null; });
@@ -120,7 +134,8 @@ var Db = (function () {
     };
   }
 
-  // Versão 1. Quando existir a versão 2, tratar aqui por oldVersion (ex.: if (antiga < 2) { ... }).
+  // Versão 1: lancamentos, categorias, config e fila. Versão 2 (#120): loja contas. Cada bloco só cria o que falta,
+  // sem tocar nas lojas antigas; roda na transação versionchange do open (tudo ou nada).
   function aoAtualizar(db, antiga) {
     if (antiga < 1) {
       var l = db.createObjectStore("lancamentos", { keyPath: "id" });
@@ -128,6 +143,9 @@ var Db = (function () {
       db.createObjectStore("categorias", { keyPath: "chave" });
       db.createObjectStore("config", { keyPath: "chave" });
       db.createObjectStore("fila", { keyPath: "seq", autoIncrement: true });
+    }
+    if (antiga < 2 && !db.objectStoreNames.contains("contas")) {
+      db.createObjectStore("contas", { keyPath: "id" });
     }
   }
 
@@ -138,13 +156,21 @@ var Db = (function () {
       var req;
       try { req = fabrica.open(NOME, VERSAO); } catch (e) { return falha(traduzir(e)); }
       req.onupgradeneeded = function (ev) { aoAtualizar(req.result, ev.oldVersion || 0); };
-      req.onblocked = function () { falha(erro("indisponivel")); };
+      var rejeitada = false;
+      req.onblocked = function () { rejeitada = true; falha(erro("indisponivel")); };
       req.onerror = function () { falha(traduzir(req.error)); };
-      req.onsuccess = function () { ok(montar(req.result)); };
+      req.onsuccess = function () {
+        // Já recusado por "blocked": ninguém usa esta conexão, então solta o banco.
+        if (rejeitada) { try { req.result.close(); } catch (_) { /* já fechada */ } return; }
+        ok(montar(req.result));
+      };
     });
   }
 
   function montar(idb) {
+    // Uma versão mais nova do app (outra janela) quer atualizar o banco: esta conexão sai da frente.
+    // Depois disso as operações desta janela caem em "indisponivel" (pede para fechar e abrir de novo).
+    idb.onversionchange = function () { idb.close(); };
     function fazer(lojas, fn) {
       return new Promise(function (ok, falha) {
         var tx, resultado, motivo = null;
@@ -173,6 +199,7 @@ var Db = (function () {
     return {
       lancamentos: grupo("lancamentos", ["gravar", "obter", "todos", "doMes"]),
       categorias: grupo("categorias", ["gravar", "ler"]),
+      contas: grupo("contas", ["gravar", "obter", "todas"]),
       config: grupo("config", ["obter", "definir"]),
       fila: grupo("fila", ["acrescentar", "todas", "substituir", "remover", "contar"]),
       // Tudo ou nada: se fn lança erro (ou devolve promessa rejeitada), nada é gravado em nenhuma loja.
@@ -181,6 +208,6 @@ var Db = (function () {
     };
   }
 
-  return { NOME: NOME, VERSAO: VERSAO, CAMPOS_REGISTRO: CAMPOS_REGISTRO, abrir: abrir, traduzir: traduzir };
+  return { NOME: NOME, VERSAO: VERSAO, CAMPOS_REGISTRO: CAMPOS_REGISTRO, CAMPOS_CONTA: CAMPOS_CONTA, abrir: abrir, traduzir: traduzir };
 })();
 if (typeof module !== "undefined") module.exports = Db;
