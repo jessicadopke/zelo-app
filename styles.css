@@ -192,7 +192,7 @@ button, a { min-height: 32px; min-width: 32px; }
 
 /* área da tela */
 .tela-area { flex: 1; overflow: hidden auto; position: relative; }
-.tela { padding: 0 var(--sp-4) var(--sp-4); }
+.tela { padding: 0 var(--sp-4) 88px; } /* 88 px no fim: respiro para o botão "+" não cobrir o último item */
 .tela[hidden] { display: none; }
 .tela h1 { margin: var(--sp-2) 0 var(--sp-4); font-size: var(--t-xl); line-height: 1.15; font-weight: var(--w-forte); }
 .cartao { background: var(--surface); border-radius: var(--r-cartao); box-shadow: var(--sh); padding: var(--sp-6) var(--sp-4); text-align: center; }
@@ -381,10 +381,6 @@ button, a { min-height: 32px; min-width: 32px; }
 
 /* ================= Telas de lançar (#18) ================= */
 
-/* Atalho "+ Novo lançamento" no Início e em Lançamentos: faixa colada no alto da área que rola */
-.atalho-novo { position: sticky; top: 0; z-index: 1; margin: 0 calc(var(--sp-4) * -1) var(--sp-4); padding: var(--sp-2) var(--sp-4); background: var(--bg); }
-.atalho-novo .btn-p { margin-top: 0; gap: var(--sp-2); text-decoration: none; }
-.atalho-novo .btn-p .ic { width: 20px; height: 20px; }
 
 /* a área que rola ganha um pai com position:relative, onde mora o aviso de baixo */
 .tela-pai { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -589,7 +585,6 @@ button, a { min-height: 32px; min-width: 32px; }
 :root[data-movimento="reduzido"] .cartao .ic-gira { animation: none; }
 
 /* ---- Início ---- */
-.inicio-saudacao { margin: 0 0 var(--sp-1); color: var(--muted); font-size: var(--t-b); }
 .inicio-mes { margin: 0 0 var(--sp-3); font-size: var(--t-l); font-weight: var(--w-forte); }
 .painel { background: var(--surface); border-radius: var(--r-cartao); box-shadow: var(--sh); padding: var(--sp-2) var(--sp-4) var(--sp-4); margin: 0 0 var(--sp-3); }
 .painel .din--linha > .din-v { font-size: var(--t-l); }
@@ -668,9 +663,7 @@ button, a { min-height: 32px; min-width: 32px; }
 
 /* ================= NOVO NO APP: leitura de comprovante e extrato ================= */
 
-/* ---- entrada: botão no Início e convite no alto do "Novo lançamento" ---- */
-.ler-atalho { margin: 0 0 var(--sp-4); }
-.ler-atalho .btn-sec { text-decoration: none; }
+/* ---- entrada: convite no alto do "Novo lançamento" ---- */
 .ler-convite { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); margin: 0 0 var(--sp-4); padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4); background: var(--accent-soft); border-radius: var(--r-campo); }
 .ler-convite > .ic { color: var(--accent); }
 .ler-convite p { flex: 1 1 8rem; margin: 0; font-size: var(--t-s); font-weight: var(--w-forte); line-height: 1.4; }
@@ -848,7 +841,7 @@ a.onde-linha > .onde-seta { align-self: center; width: 20px; height: 20px; color
 .cart-acoes .btn-sec, .cart-acoes .btn-link { grid-column: auto; margin: 0; width: 100%; }
 
 /* ---- Tela da Reserva (dentro do Início; mantém a barra de baixo) ---- */
-.reserva-cab { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-2) 0 var(--sp-3) calc(var(--sp-2) * -1); }
+.reserva-cab { display: flex; align-items: center; gap: var(--sp-2); margin: var(--sp-2) 0 var(--sp-3); }
 .reserva-cab h1 { margin: 0; }
 .reserva-cab h1:focus { outline: none; }
 .reserva-total { padding-top: var(--sp-2); }
@@ -877,16 +870,21 @@ a.onde-linha > .onde-seta { align-self: center; width: 20px; height: 20px; color
 /* ================= NOVO NO APP · contas a pagar ================= */
 /* Nenhum token novo, nenhuma cor solta. Um ícone novo (i-contas) no index.html. */
 
-/* ---- Início: cartão de entrada "Contas a pagar" (link para #contas) ---- */
-.contas-entrada { display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px; gap: var(--sp-1) var(--sp-3); align-items: center; min-height: 64px; margin: 0 0 var(--sp-3); padding: var(--sp-3) var(--sp-4); background: var(--surface); border-radius: var(--r-cartao); box-shadow: var(--sh); color: inherit; text-decoration: none; -webkit-tap-highlight-color: transparent; }
-.contas-entrada:active { background: var(--accent-soft); }
-.contas-entrada:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.contas-entrada-ic { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--r-pilula); background: var(--accent-soft); color: var(--accent); }
-.contas-entrada-ic .ic { width: 20px; height: 20px; }
-.contas-entrada-txt { min-width: 0; }
-.contas-entrada-tit { margin: 0; font-size: var(--t-b); font-weight: var(--w-forte); line-height: 1.3; }
-.contas-entrada-sub { margin: 2px 0 0; color: var(--muted); font-size: var(--t-s); line-height: 1.4; }
-.contas-entrada-seta { width: 20px; height: 20px; color: var(--accent); }
+/* ---- Início: grade de cartões (Contas a pagar, Mês, Reserva; Notas e Compromissos quando as telas existirem) ---- */
+.cartoes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); margin: 0 0 var(--sp-4); }
+.cartao-in { display: flex; flex-direction: column; justify-content: space-between; gap: var(--sp-2); min-width: 0; min-height: 96px; padding: var(--sp-3) var(--sp-4); background: var(--surface); border-radius: var(--r-cartao); box-shadow: var(--sh); color: inherit; text-decoration: none; -webkit-tap-highlight-color: transparent; }
+a.cartao-in:active { background: var(--accent-soft); }
+a.cartao-in:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.cartao-in--largo { grid-column: 1 / -1; }
+.cartao-in--esq { animation: pulsa 1.4s var(--ease-suave) var(--laco); background: var(--line); box-shadow: none; }
+.cartao-in--esq:last-child { grid-column: 1 / -1; }
+@media (prefers-reduced-motion: reduce) { .cartao-in--esq { animation: none; } }
+:root[data-movimento="reduzido"] .cartao-in--esq { animation: none; }
+.cartao-in-ic { color: var(--accent); }
+.cartao-in-ic .ic { width: 24px; height: 24px; }
+.cartao-in-txt { min-width: 0; }
+.cartao-in-tit { margin: 0; font-size: var(--t-b); font-weight: var(--w-forte); line-height: 1.3; overflow-wrap: anywhere; }
+.cartao-in-sub { margin: 2px 0 0; color: var(--muted); font-size: var(--t-s); line-height: 1.4; overflow-wrap: anywhere; }
 .contas-marca { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; margin-top: var(--sp-1); padding: 0 var(--sp-3); border-radius: var(--r-pilula); background: var(--alerta-bg); color: var(--alerta); border: 1.5px solid var(--alerta); font-size: var(--t-s); font-weight: var(--w-forte); line-height: 1.2; }
 .contas-marca .ic { width: 16px; height: 16px; }
 
@@ -953,3 +951,33 @@ a.onde-linha > .onde-seta { align-self: center; width: 20px; height: 20px; color
 .faixa-venc[data-tom="alerta"] { background: var(--alerta-bg); border-color: var(--alerta); color: var(--alerta); }
 .faixa-venc[data-tom="alerta"]:active { background: var(--bg); }
 .faixa-venc[data-tom="alerta"] .faixa-venc-ic, .faixa-venc[data-tom="alerta"] .faixa-venc-seta { color: var(--alerta); }
+
+/* ---- Fila de abas do grupo (js/abas-grupo.js) e chave do Mês (issue 158) ---- */
+.abas { display: flex; background: var(--bg); border-bottom: 1px solid var(--line); }
+.abas[hidden] { display: none; }
+.aba { flex: 1 1 0; min-width: 0; min-height: 48px; padding: 0 var(--sp-2); border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: var(--t-b); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -webkit-tap-highlight-color: transparent; }
+.aba[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.aba:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+.chave { display: flex; gap: 2px; margin: var(--sp-3) var(--sp-4) var(--sp-1); padding: 2px; background: var(--line); border-radius: var(--r-campo); }
+.chave[hidden] { display: none; }
+.chave-op { flex: 1 1 0; min-width: 0; min-height: 48px; padding: 0 var(--sp-2); border: 0; border-radius: calc(var(--r-campo) - 2px); background: transparent; color: var(--muted); font: inherit; font-size: var(--t-b); font-weight: 600; -webkit-tap-highlight-color: transparent; }
+.chave-op[aria-pressed="true"] { background: var(--surface); color: var(--accent); box-shadow: var(--sh); }
+.chave-op:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+
+/* ================= Botão "+" e folha "O que você quer fazer?"  ================= */
+.mais { position: absolute; right: var(--sp-4); bottom: var(--sp-4); z-index: 4; display: grid; place-items: center; width: 56px; height: 56px; padding: 0; border: 0; border-radius: var(--r-redondo); background: var(--accent); color: var(--on-accent); box-shadow: var(--sh); -webkit-tap-highlight-color: transparent; }
+.mais .ic { width: 28px; height: 28px; }
+.mais:active { transform: scale(var(--escala-aperta)); }
+.mais:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.mais[hidden] { display: none; }
+.folha-mais-fundo { position: fixed; inset: 0; z-index: 20; display: flex; align-items: flex-end; }
+.folha-mais-fundo[hidden] { display: none; }
+.folha-mais { position: relative; width: 100%; max-height: 90%; overflow-y: auto; padding: var(--sp-2) var(--sp-4) calc(var(--sp-4) + env(safe-area-inset-bottom)); background: var(--surface); border-radius: var(--r-cartao) var(--r-cartao) 0 0; box-shadow: var(--sh); animation: folha-sobe var(--dur-media) var(--ease-entra); }
+.folha-mais-alca { display: block; width: 40px; height: 4px; margin: 0 auto var(--sp-3); border-radius: var(--r-pilula); background: var(--line); }
+.folha-mais h2 { margin: 0 0 var(--sp-2); font-size: var(--t-l); font-weight: var(--w-forte); }
+.folha-mais h2:focus { outline: none; }
+.folha-mais-lista { list-style: none; margin: 0; padding: 0; }
+.folha-mais-item { display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-height: 56px; padding: 0 var(--sp-2); border: 0; border-radius: var(--r-campo); background: transparent; color: var(--fg); font: inherit; font-size: var(--t-b); text-align: left; -webkit-tap-highlight-color: transparent; }
+.folha-mais-item .ic { width: 24px; height: 24px; color: var(--accent); flex: none; }
+.folha-mais-item:active { background: var(--accent-soft); }
+.folha-mais-item:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }

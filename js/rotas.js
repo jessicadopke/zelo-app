@@ -1,24 +1,31 @@
 // Zelo: rotas das telas e dos grupos da barra (lógica pura, testada com node --test). No navegador vira o objeto global Rotas.
 var Rotas = (function () {
-  // Telas com <section data-tela> (a ordem é a da direção da animação). Contas e Reserva ainda são subtelas do Início
-  // (ver subtelaDoHash), mas têm rótulo próprio e pertencem ao grupo Dinheiro.
+  // Telas com <section data-tela> (a ordem é a da direção da animação). Contas e Reserva são abas do grupo Dinheiro.
   var TELAS = [
     { id: "inicio", rotulo: "Início" },
     { id: "lancamentos", rotulo: "Lançamentos" },
     { id: "resumo", rotulo: "Resumo" },
+    { id: "contas", rotulo: "Contas a pagar" },
+    { id: "reserva", rotulo: "Reserva" },
     { id: "ajustes", rotulo: "Ajustes" },
     { id: "conversa", rotulo: "Conversa" },
     { id: "notas", rotulo: "Notas" },
     { id: "compromissos", rotulo: "Compromissos" },
   ];
-  var SUBTELAS = [
-    { id: "contas", rotulo: "Contas a pagar" },
-    { id: "reserva", rotulo: "Reserva" },
-  ];
   // Grupos da barra de baixo e da gaveta, na ordem em que aparecem.
   var GRUPOS = [
     { id: "inicio", rotulo: "Início", icone: "i-casa", telas: ["inicio"] },
-    { id: "dinheiro", rotulo: "Dinheiro", icone: "i-dinheiro", telas: ["lancamentos", "resumo", "contas", "reserva"] },
+    {
+      id: "dinheiro", rotulo: "Dinheiro", icone: "i-dinheiro", telas: ["lancamentos", "resumo", "contas", "reserva"],
+      // Fila de abas do grupo. "rotas": telas que a aba acende (Mês junta Lançamentos e Resumo). "disponivel:false": ainda não existe
+      // (Fixas, até a #154 ligar), então não aparece.
+      abas: [
+        { id: "lancamentos", rotulo: "Mês", rotas: ["lancamentos", "resumo"] },
+        { id: "contas", rotulo: "Contas" },
+        { id: "fixas", rotulo: "Fixas", disponivel: false },
+        { id: "reserva", rotulo: "Reserva" },
+      ],
+    },
     { id: "zelo", rotulo: "Zelo", icone: "i-zelo", telas: ["conversa", "notas"] },
     { id: "agenda", rotulo: "Agenda", icone: "i-agenda", telas: ["compromissos"] },
     { id: "sistema", rotulo: "Sistema", icone: "i-ajustes", telas: ["ajustes"] },
@@ -31,7 +38,7 @@ var Rotas = (function () {
     return TELAS.some(function (a) { return a.id === id; }) ? id : PADRAO;
   }
   function rotulo(id) {
-    var a = TELAS.concat(SUBTELAS).filter(function (x) { return x.id === id; })[0];
+    var a = TELAS.filter(function (x) { return x.id === id; })[0];
     return a ? a.rotulo : "";
   }
   function titulo(id) {
@@ -61,6 +68,47 @@ var Rotas = (function () {
     if (de === PADRAO) return "empurrar";
     return para === PADRAO ? "voltar" : "trocar";
   }
+  function grupoPorId(id) {
+    return GRUPOS.filter(function (x) { return x.id === id; })[0] || null;
+  }
+  // Abas do grupo que existem hoje (as com disponivel:false ficam de fora). Grupo sem abas -> [].
+  function abasVisiveis(grupo) {
+    var g = grupoPorId(grupo);
+    return ((g && g.abas) || []).filter(function (a) { return a.disponivel !== false; });
+  }
+  // Id da aba que uma rota acende (resumo -> lancamentos). Rota sem aba -> null.
+  function abaDoGrupo(rota) {
+    var g = grupoPorId(grupoDaBarra(rota));
+    var abas = (g && g.abas) || [];
+    for (var i = 0; i < abas.length; i++) {
+      if (abas[i].id === rota || (abas[i].rotas && abas[i].rotas.indexOf(rota) >= 0)) return abas[i].id;
+    }
+    return null;
+  }
+  // Qual tela do Mês abrir: a última chave usada (só em memória); valor desconhecido ou vazio -> Lançamentos.
+  function rotaDoMes(ultima) {
+    return ultima === "resumo" ? "resumo" : "lancamentos";
+  }
+  // Nome das telas que não estão em TELAS ainda (a gaveta mostra "Contas fixas" quando a aba existir).
+  var ROTULO_ITEM = { fixas: "Contas fixas" };
+  // Itens da gaveta de um grupo: [{ id, texto, atual }]. Dinheiro usa as abas visíveis (Mês no lugar de Lançamentos e Resumo);
+  // os outros grupos listam suas telas. `rota` é a tela à vista.
+  function itensDaGaveta(grupo, rota) {
+    var g = grupoPorId(grupo);
+    if (!g) return [];
+    if (g.abas) {
+      var ativa = abaDoGrupo(rota);
+      return abasVisiveis(grupo).map(function (a) {
+        return { id: a.id, texto: a.rotas ? a.rotulo : (ROTULO_ITEM[a.id] || rotulo(a.id)), atual: a.id === ativa };
+      });
+    }
+    return g.telas.map(function (t) { return { id: t, texto: rotulo(t), atual: t === rota }; });
+  }
+  // Telas que ainda são "Em breve". Quem entregar a tela tira o id desta lista (os cartões do Início e o "+" acompanham sozinhos).
+  var EM_BREVE = ["conversa", "notas", "compromissos"];
+  function emBreve(rota) {
+    return EM_BREVE.indexOf(rota) >= 0;
+  }
   // Telas de tela cheia, fora das abas: "#novo" -> { tipo: "novo" }; "#editar/<id>" -> { tipo: "editar", id };
   // "#reserva/guardar|tirar|passar" e "#conferir" -> { tipo: "guardar" | "tirar" | "passar" | "conferir" }; "#ler" -> { tipo: "ler" }
   // (Ler comprovante, #73). O resto -> null.
@@ -76,13 +124,9 @@ var Rotas = (function () {
     var m = /^editar\/([0-9A-Za-z-]{1,64})$/.exec(h);
     return m ? { tipo: "editar", id: m[1] } : null;
   }
-  // Tela dentro do Início por enquanto (a barra de baixo marca o grupo Dinheiro): "#reserva" -> "reserva", "#contas" -> "contas". O resto -> null.
-  function subtelaDoHash(hash) {
-    var h = String(hash || "").replace(/^#/, "");
-    return h === "reserva" || h === "contas" ? h : null;
-  }
   return {
-    subtelaDoHash: subtelaDoHash, TELAS: TELAS, GRUPOS: GRUPOS, PADRAO: PADRAO, abaDoHash: abaDoHash, telaDoHash: telaDoHash,
+    abasVisiveis: abasVisiveis, abaDoGrupo: abaDoGrupo, rotaDoMes: rotaDoMes, itensDaGaveta: itensDaGaveta,
+    emBreve: emBreve, EM_BREVE: EM_BREVE, TELAS: TELAS, GRUPOS: GRUPOS, PADRAO: PADRAO, abaDoHash: abaDoHash, telaDoHash: telaDoHash,
     rotulo: rotulo, titulo: titulo, direcao: direcao, grupoDaBarra: grupoDaBarra, primeiraTela: primeiraTela, comoNavegar: comoNavegar,
   };
 })();

@@ -10,6 +10,7 @@ var TelaVer = (function () {
   var Opc = typeof Opcoes !== "undefined" ? Opcoes : require("./opcoes.js");
   var Res = typeof Reserva !== "undefined" ? Reserva : require("./reserva.js");
   var Con = typeof Contas !== "undefined" ? Contas : require("./contas.js");
+  var Rot = typeof Rotas !== "undefined" ? Rotas : require("./rotas.js");
 
   var SVG_NS = "http://www.w3.org/2000/svg";
   var CINCO_MIN = 5 * 60 * 1000;
@@ -21,7 +22,7 @@ var TelaVer = (function () {
   var SEM_FILTRO = { categoria: undefined, pessoa: undefined, cartao: undefined };
 
   // env: { pronto: Promise<{ db, controle } | null>, hoje(), online(), agora(), agendar(fn, ms), cancelar(t), doc,
-  //        ir(aba), novo(), editar(id), pagarFatura(cartao), reserva(), contas(), conferir(lugar), marcas (opcional: Alterado.criarMarcas(), a marca "alterado no outro celular") }
+  //        ir(aba), ultimaChave() (última visão do Mês usada), novo(), editar(id), pagarFatura(cartao), reserva(), contas(), conferir(lugar), marcas (opcional: Alterado.criarMarcas(), a marca "alterado no outro celular") }
   function criar(env) {
     var doc = env.doc || document;
     var agora = env.agora || function () { return new Date().getTime(); };
@@ -608,25 +609,44 @@ var TelaVer = (function () {
       a.append(ic(tx.tom === "alerta" ? "i-atencao" : "i-espera", "faixa-venc-ic"), corpo, ic("i-seta-dir", "faixa-venc-seta"));
       return a;
     }
-    // ---- cartão "Contas a pagar" (Início, #120): sempre presente, abre a tela #contas ----
-    function cartaoContas(r) {
-      var tx = Con.textoEntrada(r || { vencidas: 0, aPagar: 0, pagas: 0, lida: false });
-      var a = link("contas-entrada", "#contas", "", function () { if (env.contas) env.contas(); });
-      a.setAttribute("data-foco", "contas");
-      var circulo = el("span", "contas-entrada-ic");
-      circulo.appendChild(ic("i-contas"));
-      var txt = el("div", "contas-entrada-txt");
-      txt.appendChild(el("p", "contas-entrada-tit", "Contas a pagar"));
-      if (tx.marca) {
+    // ---- grade de cartões do Início (#159): cada um é um link inteiro tocável para uma tela; o apoio vem do que o Início já calcula ----
+    function cartaoIn(href, classe, rotulo, apoio, icone, aoClicar, foco) {
+      var a = link("cartao-in" + (classe ? " " + classe : ""), href, "", aoClicar);
+      if (foco) a.setAttribute("data-foco", foco);
+      var txt = el("div", "cartao-in-txt");
+      txt.appendChild(el("p", "cartao-in-tit", rotulo));
+      if (apoio.marca) {
         var m = el("div");
         var pil = el("span", "contas-marca");
-        pil.append(ic("i-atencao"), tx.marca);
+        pil.append(ic("i-atencao"), apoio.marca);
         m.appendChild(pil);
         txt.appendChild(m);
       }
-      if (tx.sub) txt.appendChild(el("p", "contas-entrada-sub", tx.sub));
-      a.append(circulo, txt, ic("i-seta-dir", "contas-entrada-seta"));
+      if (apoio.sub) txt.appendChild(el("p", "cartao-in-sub", apoio.sub));
+      var circulo = el("span", "cartao-in-ic");
+      circulo.appendChild(ic(icone));
+      a.append(circulo, txt);
       return a;
+    }
+    function painelOnde(d) {
+      return Res.painel(d.todos, d.opcoes, env.hoje(), { sincronizou: d.lig.sincronizou, online: env.online(), esperando: !!Ver_.pendentes(d.todos).texto });
+    }
+    function gradeDeCartoes(d) {
+      var grade = el("div", "cartoes");
+      // Contas a pagar: o texto de apoio é o de sempre (Con.textoEntrada)
+      grade.appendChild(cartaoIn("#contas", "contas-entrada", "Contas a pagar", Con.textoEntrada(d.contas || { vencidas: 0, aPagar: 0, pagas: 0, lida: false }), "i-contas", function () { if (env.contas) env.contas(); }, "contas"));
+      // Mês: abre a última visão usada (Lançamentos ou Resumo); o apoio é o gasto do mês atual
+      var rotaMes = Rot.rotaDoMes(env.ultimaChave ? env.ultimaChave() : null);
+      var apoioMes = d.lista.length === 0 ? "Nenhum lançamento" : "Gasto " + Ver_.reais(Ver_.totais(d.lista, d.mes).saiu);
+      grade.appendChild(cartaoIn("#" + rotaMes, "", "Mês", { sub: apoioMes }, "i-resumo", function () { env.ir(rotaMes); }, "mes"));
+      // Reserva: o total guardado que o painel já mostra; sem saldo conferido, um convite que continua tocável
+      var p = painelOnde(d);
+      var apoioRes = p && p.guardado && p.guardado.centavos !== 0 ? p.guardado.palavra + " " + p.guardado.valor : "Ver a reserva";
+      grade.appendChild(cartaoIn("#reserva", "", "Reserva", { sub: apoioRes }, "i-caixinha", function () { if (env.reserva) env.reserva(); }, "reserva-cartao"));
+      // Notas e Compromissos: só quando a tela deixar de ser "Em breve" (Rotas.emBreve)
+      if (!Rot.emBreve("notas")) grade.appendChild(cartaoIn("#notas", "", "Notas", { sub: "Abrir as notas" }, "i-arquivo", function () { env.ir("notas"); }, "notas"));
+      if (!Rot.emBreve("compromissos")) grade.appendChild(cartaoIn("#compromissos", "cartao-in--largo", "Compromissos", { sub: "Ver a agenda" }, "i-agenda", function () { env.ir("compromissos"); }, "compromissos"));
+      return grade;
     }
 
     // ---- painel "Onde está o dinheiro" (Início, #39 P5): conta, guardado, cartões e patrimônio ----
@@ -653,7 +673,7 @@ var TelaVer = (function () {
       return b;
     }
     function blocoOnde(d) {
-      var p = Res.painel(d.todos, d.opcoes, env.hoje(), { sincronizou: d.lig.sincronizou, online: env.online(), esperando: !!Ver_.pendentes(d.todos).texto });
+      var p = painelOnde(d);
       if (!p) return null;
       var sec = el("section", "painel onde");
       var h = el("h2", "", "Onde está o dinheiro"); h.setAttribute("id", "h-onde");
@@ -824,10 +844,13 @@ var TelaVer = (function () {
       var d = dadosIni;
       if (!d) return;
       var raiz = el("div");
+      var faixaV = faixaVencimento(d.contas);
+      if (faixaV) raiz.appendChild(faixaV);
+      raiz.appendChild(gradeDeCartoes(d));
       raiz.appendChild(el("h2", "inicio-mes", Ver_.nomeDoMes(d.mes)));
       if (d.lista.length === 0) {
         var v = Ver_.vazio(contextoVazio(d, false));
-        if (v.tipo === "mes") v = { tipo: "mes", titulo: "Ainda não há lançamentos em " + Ver_.nomeDoMes(d.mes), apoio: "Use o botão acima para anotar o primeiro gasto ou a primeira entrada.", icone: "i-vazio", status: true, acao: null };
+        if (v.tipo === "mes") v = { tipo: "mes", titulo: "Ainda não há lançamentos em " + Ver_.nomeDoMes(d.mes), apoio: "Toque no + para anotar o primeiro gasto ou a primeira entrada.", icone: "i-vazio", status: true, acao: null };
         raiz.appendChild(cartao(v));
       } else {
         var t = Ver_.totais(d.lista, d.mes);
@@ -843,14 +866,12 @@ var TelaVer = (function () {
           raiz.appendChild(a);
         }
       }
-      var faixaV = faixaVencimento(d.contas);
-      if (faixaV) raiz.appendChild(faixaV);
-      raiz.appendChild(cartaoContas(d.contas));
       var onde = blocoOnde(d);
       if (onde) raiz.appendChild(onde);
       var cini = blocoCartoesIni(d);
       if (cini) raiz.appendChild(cini);
       colocar($("ini-conteudo"), raiz);
+      $("ini-conteudo").removeAttribute("aria-busy");
       desenhado.inicio = d.id + ":" + versao;
     }
 

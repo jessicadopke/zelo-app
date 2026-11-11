@@ -3,7 +3,7 @@
 // Fechar por ×, véu, Escape ou item chama `voltar()`; quando o histórico volta, o app chama `aoVoltar()` e a gaveta fecha.
 // Texto sempre como textContent. No navegador vira o objeto global Gaveta.
 var Gaveta = (function () {
-  // env: { doc, grupos, rotulo(id), atual() -> id da tela à vista, ir(id), historico: { empurrar, voltar }, resto (elemento que fica inerte) }
+  // env: { doc, grupos, rotulo(id), itens(grupoId, rotaAtual) -> [{ id, texto, atual }] (opcional; sem ele, as telas do grupo), atual() -> id da tela à vista, ir(id), historico: { empurrar, voltar }, resto (elemento que fica inerte) }
   // Elementos esperados no HTML: #gaveta (fundo), #gaveta-veu, #gaveta-fechar, #gaveta-lista e o botão #menu-btn (☰).
   function criar(env) {
     var doc = env.doc;
@@ -15,13 +15,13 @@ var Gaveta = (function () {
     var aberta = false;
     var escolha = null;
 
-    function item(id, texto, atual) {
+    function item(id, texto, marcado) {
       var li = doc.createElement("li");
       var a = doc.createElement("a");
       a.className = "gaveta-item";
       a.setAttribute("href", "#" + id);
       a.setAttribute("data-id", id);
-      if (id === atual) a.setAttribute("aria-current", "page");
+      if (marcado) a.setAttribute("aria-current", "page");
       a.textContent = texto;
       a.addEventListener("click", function (e) {
         if (e && e.preventDefault) e.preventDefault();
@@ -48,7 +48,10 @@ var Gaveta = (function () {
           bloco.appendChild(h);
           ul.setAttribute("aria-labelledby", "gaveta-g-" + g.id);
         }
-        g.telas.forEach(function (t) { ul.appendChild(item(t, env.rotulo(t), atual)); });
+        var itens = env.itens
+          ? env.itens(g.id, atual)
+          : g.telas.map(function (t) { return { id: t, texto: env.rotulo(t), atual: t === atual }; });
+        itens.forEach(function (it) { ul.appendChild(item(it.id, it.texto, it.atual)); });
         bloco.appendChild(ul);
         lista.appendChild(bloco);
       });

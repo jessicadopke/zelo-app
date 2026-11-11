@@ -1,5 +1,5 @@
 // Zelo: cópia offline. Arquivo novo do app entra em FILES, senão não abre sem internet.
-const VERSION = "zelo-0.14.0";
+const VERSION = "zelo-0.15.0";
 const FILES = [
   "./",
   "index.html",
@@ -9,6 +9,8 @@ const FILES = [
   "js/app.js",
   "js/rotas.js",
   "js/gaveta.js",
+  "js/abas-grupo.js",
+  "js/mais.js",
   "js/tema.js",
   "js/dinheiro.js",
   "js/datas.js",

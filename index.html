@@ -87,45 +87,48 @@ try {
     <div><strong>Não consegui abrir esta tela</strong>Nada se perdeu. Tente de novo em instantes.<br><button class="btn-s" id="erro-de-novo" type="button">Tentar de novo</button></div>
   </div>
 
+  <!-- Fila de abas do grupo à vista (Dinheiro: Mês, Contas, Reserva); desenhada por js/abas-grupo.js. Some em Início, Agenda e telas cheias. -->
+  <div class="abas" id="abas" hidden></div>
+
   <div class="tela-pai">
   <main class="tela-area" id="conteudo" tabindex="-1">
+    <!-- Chave do Mês: só aparece em Lançamentos e Resumo. Troca de tela com replaceState (o Voltar não fica alternando). -->
+    <div class="chave" id="chave-mes" role="group" aria-label="Ver o mês em" hidden>
+      <button class="chave-op" type="button" data-chave="lancamentos" aria-pressed="true">Lançamentos</button>
+      <button class="chave-op" type="button" data-chave="resumo" aria-pressed="false">Resumo</button>
+    </div>
     <section class="tela" data-tela="inicio" aria-labelledby="t-inicio">
       <div id="ini-principal">
-        <h1 id="t-inicio">Início</h1>
-        <div class="atalho-novo"><a class="btn-p" href="#novo" data-novo><svg class="ic" aria-hidden="true"><use href="#i-mais"/></svg>Novo lançamento</a></div>
-        <div class="ler-atalho"><a class="btn-sec" href="#ler" data-ler><svg class="ic" aria-hidden="true"><use href="#i-arquivo"/></svg>Ler comprovante</a></div>
-        <p class="inicio-saudacao" id="saudacao">Olá</p>
-        <div id="ini-conteudo"></div>
-      </div>
-      <!-- Reserva (#reserva): tela dentro do Início; a barra de baixo continua com "Início" marcado. -->
-      <div id="reserva-tela" hidden>
-        <div class="reserva-cab">
-          <button class="btn-icone" id="rs-voltar" type="button" aria-label="Voltar para o Início"><svg class="ic" aria-hidden="true"><use href="#i-seta-esq"/></svg></button>
-          <h1 id="rs-titulo" tabindex="-1">Reserva</h1>
-        </div>
-        <div id="reserva-conteudo"></div>
-        <p class="so-leitor" id="rs-voz" role="status" aria-live="polite" aria-atomic="true"></p>
-      </div>
-      <!-- Contas a pagar (#contas): tela dentro do Início, só de leitura; desenhada por js/tela-contas.js. -->
-      <div id="contas-tela" hidden>
-        <div class="reserva-cab">
-          <button class="btn-icone" id="ct-voltar" type="button" aria-label="Voltar para o Início"><svg class="ic" aria-hidden="true"><use href="#i-seta-esq"/></svg></button>
-          <h1 id="ct-titulo" tabindex="-1">Contas a pagar</h1>
-        </div>
-        <div id="contas-conteudo"></div>
+        <h1 id="t-inicio"><span id="saudacao">Olá</span></h1>
+        <!-- Esqueleto da grade de cartões até o banco responder; a tela de ver troca pelo conteúdo. -->
+        <div id="ini-conteudo" aria-busy="true"><div class="cartoes" aria-hidden="true"><span class="cartao-in cartao-in--esq"></span><span class="cartao-in cartao-in--esq"></span><span class="cartao-in cartao-in--esq"></span></div></div>
       </div>
     </section>
     <section class="tela" data-tela="lancamentos" aria-labelledby="t-lan" hidden>
-      <h1 id="t-lan" tabindex="-1">Lançamentos</h1>
-      <div class="atalho-novo"><a class="btn-p" href="#novo" data-novo><svg class="ic" aria-hidden="true"><use href="#i-mais"/></svg>Novo lançamento</a></div>
+      <h1 id="t-lan" class="so-leitor" tabindex="-1">Lançamentos</h1>
       <div id="lan-nota"></div>
       <div id="lan-conteudo"></div>
       <p class="so-leitor" id="lan-voz" role="status" aria-live="polite" aria-atomic="true"></p>
     </section>
     <section class="tela" data-tela="resumo" aria-labelledby="t-res" hidden>
-      <h1 id="t-res">Resumo</h1>
+      <h1 id="t-res" class="so-leitor">Resumo</h1>
       <div id="res-conteudo"></div>
       <p class="so-leitor" id="res-voz" role="status" aria-live="polite" aria-atomic="true"></p>
+    </section>
+    <!-- Contas a pagar (#contas): aba do grupo Dinheiro, só de leitura; desenhada por js/tela-contas.js. -->
+    <section class="tela" data-tela="contas" aria-labelledby="ct-titulo" hidden>
+      <div class="reserva-cab">
+        <h1 id="ct-titulo" tabindex="-1">Contas a pagar</h1>
+      </div>
+      <div id="contas-conteudo"></div>
+    </section>
+    <!-- Reserva (#reserva): aba do grupo Dinheiro; desenhada por js/tela-reserva.js. -->
+    <section class="tela" data-tela="reserva" aria-labelledby="rs-titulo" hidden>
+      <div class="reserva-cab">
+        <h1 id="rs-titulo" tabindex="-1">Reserva</h1>
+      </div>
+      <div id="reserva-conteudo"></div>
+      <p class="so-leitor" id="rs-voz" role="status" aria-live="polite" aria-atomic="true"></p>
     </section>
     <section class="tela" data-tela="ajustes" aria-labelledby="t-aju" hidden>
       <h1 id="t-aju">Ajustes</h1>
@@ -244,6 +247,8 @@ try {
   </main>
   <!-- Aviso de baixo ("Guardado…", "Lançamento apagado. Desfazer"): por cima da área, sem empurrar nada. Vazio some. -->
   <div class="aviso-fixo" id="aviso" role="status"></div>
+  <!-- Botão "+": as opções mudam por tela. Fica dentro da área da tela, acima da barra de baixo. -->
+  <button class="mais" id="mais" type="button" hidden><svg class="ic" aria-hidden="true"><use href="#i-mais"/></svg></button>
   </div>
 
   <nav class="nav" aria-label="Telas do Zelo">
@@ -264,6 +269,15 @@ try {
     </div>
     <ul class="gaveta-lista" id="gaveta-lista"></ul>
   </aside>
+</div>
+<!-- Folha do "+": painel de baixo com as opções da tela. Só abre pelo botão; as linhas são desenhadas pelo módulo Mais. -->
+<div class="folha-mais-fundo" id="mais-folha" hidden>
+  <div class="veu" id="mais-veu"></div>
+  <div class="folha-mais" role="dialog" aria-modal="true" aria-labelledby="mais-titulo">
+    <span class="folha-mais-alca" aria-hidden="true"></span>
+    <h2 id="mais-titulo" tabindex="-1">O que você quer fazer?</h2>
+    <ul class="folha-mais-lista" id="mais-lista"></ul>
+  </div>
 </div>
 <!-- Formulário de lançar (Novo e Editar): tela cheia por cima das abas, aberta por #novo e #editar/<id>. -->
 <section class="form" id="form" aria-labelledby="form-t" hidden>
@@ -453,6 +467,8 @@ try {
 <script src="js/tela-contas.js"></script>
 <script src="js/tela-ver.js"></script>
 <script src="js/gaveta.js"></script>
+<script src="js/abas-grupo.js"></script>
+<script src="js/mais.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

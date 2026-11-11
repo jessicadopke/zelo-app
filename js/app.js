@@ -1,6 +1,6 @@
 // Zelo: núcleo do app. Navegação por abas, tema e cópia offline. O conteúdo das telas vem nas próximas partes.
 // Depende de js/rotas.js (Rotas) e js/tema.js (Tema), carregados antes no index.html.
-const APP_VERSION = "0.14.0";
+const APP_VERSION = "0.15.0";
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -39,17 +39,16 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
 
   // ---- navegação ----
   let atual = null;
-  let reservaAberta = false; // tela da Reserva (#reserva), que mora dentro do Início
-  let contasAberta = false; // tela de Contas a pagar (#contas), também dentro do Início
-  let telaReserva = null, telaMov = null, telaLeitura = null, telaContas = null; // criadas mais abaixo
-  const subAtual = () => (reservaAberta ? "reserva" : contasAberta ? "contas" : null);
+  let ultimaChave = null; // última visão do Mês usada (lancamentos ou resumo): só em memória, some ao fechar o app
+  let telaReserva = null, telaMov = null, telaLeitura = null, telaContas = null, mais = null; // criadas mais abaixo
   const aoMostrar = []; // funções chamadas com o id da aba que acabou de aparecer
 
   function mostrar(id) {
     const antes = atual;
     atual = id;
-    if (reservaAberta && id !== "inicio") fecharReservaTela();
-    if (contasAberta && id !== "inicio") fecharContasTela();
+    if (id === "lancamentos" || id === "resumo") ultimaChave = id;
+    if (antes === "contas" && id !== "contas" && telaContas) telaContas.fechar();
+    if (antes === "reserva" && id !== "reserva" && telaReserva) telaReserva.fechar();
     const dir = antes ? Rotas.direcao(antes, id) : null;
     $$(".tela").forEach((t) => {
       t.hidden = t.dataset.tela !== id;
@@ -69,9 +68,13 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     aoMostrar.forEach((f) => f(id));
   }
 
-  // Barra de baixo e nome no topo: marcam o GRUPO da tela à vista (Contas e Reserva, que moram no Início, marcam Dinheiro).
+  // Barra de baixo, nome no topo, fila de abas e chave do Mês: tudo a partir da tela à vista.
+  const chaveEl = $("#chave-mes");
   function pintarNavegacao() {
-    const g = Rotas.grupoDaBarra(subAtual() || atual);
+    const g = Rotas.grupoDaBarra(atual);
+    if (abasGrupo) abasGrupo.mostrar(atual);
+    chaveEl.hidden = atual !== "lancamentos" && atual !== "resumo";
+    $$(".chave-op", chaveEl).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.chave === atual)));
     $$(".nav a").forEach((a) => {
       if (a.dataset.id === g) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
@@ -86,12 +89,8 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   // A pilha do histórico é sempre Início -> tela atual (ver Rotas.comoNavegar): do Início empilha, entre telas de grupo troca,
   // e "Início" dentro de um grupo volta uma entrada (cai no Início e a pilha fica zerada).
   function ir(id) {
-    if (id === atual) {
-      if (id === "inicio" && (reservaAberta || contasAberta)) history.back(); // "Início" tocado dentro da Reserva ou das Contas volta ao Início
-      return;
-    }
-    // Com Contas ou Reserva abertas a entrada de cima é a da subtela: ela é trocada, não empilhada.
-    const como = subAtual() && id !== "inicio" ? "trocar" : Rotas.comoNavegar(atual, id);
+    if (id === atual) return;
+    const como = Rotas.comoNavegar(atual, id);
     if (como === "voltar") { history.back(); return; }
     if (como === "empurrar") history.pushState({ aba: id }, "", "#" + id);
     else history.replaceState({ aba: id }, "", "#" + id);
@@ -101,9 +100,16 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   $$(".nav a").forEach((a) => a.addEventListener("click", (e) => {
     e.preventDefault();
     const grupo = a.dataset.id;
-    if (grupo === Rotas.grupoDaBarra(subAtual() || atual)) return; // já está no grupo (inclusive Contas/Reserva dentro de Dinheiro)
-    ir(Rotas.primeiraTela(grupo));
+    if (grupo === Rotas.grupoDaBarra(atual)) return; // já está no grupo
+    ir(grupo === "dinheiro" ? Rotas.rotaDoMes(ultimaChave) : Rotas.primeiraTela(grupo));
   }));
+  // Fila de abas (js/abas-grupo.js): trocar de aba não empilha (ir usa replaceState entre telas de grupo). Mês abre a última chave usada.
+  const abasEl = $("#abas");
+  const abasGrupo = typeof AbasGrupo !== "undefined" && abasEl
+    ? AbasGrupo.criar({ doc: document, raiz: abasEl, rotas: Rotas, aoEscolher: (aba) => ir(aba === "lancamentos" ? Rotas.rotaDoMes(ultimaChave) : aba) })
+    : null;
+  // Chave Lançamentos | Resumo: só troca de tela (o mês escolhido é um só e mora em js/tela-ver.js).
+  $$(".chave-op", chaveEl).forEach((b) => b.addEventListener("click", () => ir(b.dataset.chave)));
   // O botão voltar do Android (popstate) é tratado mais abaixo, junto com a gaveta e a tela de lançar.
   const hashInicial = location.hash;
   const inicial = Rotas.abaDoHash(location.hash);
@@ -112,7 +118,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     // Abertura direta (atalho, link): grava o Início por baixo, para o Voltar levar ao Início.
     history.replaceState({ aba: "inicio" }, "", "#inicio");
     history.pushState({ aba: inicial }, "", "#" + inicial);
-  } else if (!abertoNumGrupo || history.state.gaveta) {
+  } else if (!abertoNumGrupo || history.state.gaveta || history.state.folha) {
     history.replaceState({ aba: inicial }, "", "#" + inicial);
   }
   mostrar(inicial);
@@ -332,7 +338,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   function formAtivo() { return telaLancar && telaLancar.aberto() ? telaLancar : telaMov && telaMov.aberto() ? telaMov : null; }
   function empurrar(hash) {
     hashDaTela = hash;
-    history.pushState({ aba: atual, tela: true, sub: subAtual() }, "", hash);
+    history.pushState({ aba: atual, tela: true }, "", hash);
   }
   // Abre o formulário certo para a rota: Novo, Editar (o tipo do lançamento escolhe o editor) ou um dos da Reserva.
   function abrirPorRota(t, memoria) {
@@ -354,10 +360,6 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     abrirPorRota(t, memoria);
   }
   function abrirMovimento(t, hash) { abrirTelaLancar(t, hash, t); }
-  $$("[data-novo]").forEach((a) => a.addEventListener("click", (e) => {
-    e.preventDefault();
-    abrirTelaLancar({ tipo: "novo" }, "#novo");
-  }));
 
   // ---- Ler comprovante (#ler, js/tela-leitura.js): tela cheia por cima das abas ----
   // O arquivo lido só existe na memória da tela e é solto ao sair; nada dele vai para o endereço nem para o histórico.
@@ -412,71 +414,14 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     abrirLer();
   }));
 
-  // ---- Reserva: tela dentro do Início (#reserva); a barra de baixo continua com "Início" marcado ----
-  const reservaEl = $("#reserva-tela"), principalEl = $("#ini-principal");
-  function abrirReservaTela() {
-    if (reservaAberta || !reservaEl || !telaReserva) return;
-    reservaAberta = true;
-    principalEl.hidden = true;
-    reservaEl.hidden = false;
-    document.title = "Reserva · Zelo";
-    pintarNavegacao();
-    telaReserva.abrir();
-  }
-  function fecharReservaTela(foco) {
-    if (!reservaAberta) return;
-    reservaAberta = false;
-    reservaEl.hidden = true;
-    principalEl.hidden = false;
-    document.title = Rotas.titulo(atual || "inicio");
-    pintarNavegacao();
-    telaReserva.fechar();
-    if (foco) {
-      const alvo = $('[data-foco="reserva"]');
-      if (alvo && alvo.focus) alvo.focus({ preventScroll: true });
-    }
-  }
-  function abrirReserva() {
-    if (reservaAberta || atual !== "inicio" || !telaReserva) return;
-    history.pushState({ aba: "inicio", sub: "reserva" }, "", "#reserva");
-    abrirReservaTela();
-  }
-  // ---- Contas a pagar: tela dentro do Início (#contas), mesmo jeito da Reserva ----
-  const contasEl = $("#contas-tela");
-  function abrirContasTela() {
-    if (contasAberta || !contasEl || !telaContas) return;
-    contasAberta = true;
-    principalEl.hidden = true;
-    contasEl.hidden = false;
-    document.title = "Contas a pagar · Zelo";
-    pintarNavegacao();
-    telaContas.abrir();
-  }
-  function fecharContasTela(foco) {
-    if (!contasAberta) return;
-    contasAberta = false;
-    contasEl.hidden = true;
-    principalEl.hidden = false;
-    document.title = Rotas.titulo(atual || "inicio");
-    pintarNavegacao();
-    telaContas.fechar();
-    if (foco) {
-      const alvo = $('[data-foco="faixa-venc"]') || $('[data-foco="contas"]'); // a faixa de aviso (#122), se existir
-      if (alvo && alvo.focus) alvo.focus({ preventScroll: true });
-    }
-  }
-  function abrirContas() {
-    if (contasAberta || reservaAberta || atual !== "inicio" || !telaContas) return;
-    history.pushState({ aba: "inicio", sub: "contas" }, "", "#contas");
-    abrirContasTela();
-  }
+  // ---- Reserva e Contas a pagar: abas do grupo Dinheiro (#reserva, #contas); abrir a aba chama o gancho aoMostrar abaixo ----
+  const reservaEl = $('[data-tela="reserva"]'), contasEl = $('[data-tela="contas"]');
   telaContas = typeof TelaContas !== "undefined" && typeof Contas !== "undefined" && contasEl
     ? TelaContas.criar({
       pronto: pronto,
       hoje: () => Datas.hoje(),
       online: () => navigator.onLine !== false,
       agora: () => Date.now(),
-      sair: () => history.back(),
       // A conta vai só em memória (nunca na URL): o endereço continua "#novo". Salvar ou descartar volta para esta lista.
       pagar: (conta) => abrirTelaLancar({ tipo: "novo", conta: conta }, "#novo"),
     })
@@ -489,9 +434,8 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
       hoje: () => Datas.hoje(),
       online: () => navigator.onLine !== false,
       agora: () => Date.now(),
-      sair: () => history.back(),
       // Sem caixinha (ou script antigo): a Reserva não existe; volta ao Início sem deixar entrada no histórico.
-      semReserva: () => { history.replaceState({ aba: "inicio" }, "", "#inicio"); fecharReservaTela(); },
+      semReserva: () => { history.replaceState({ aba: "inicio" }, "", "#inicio"); mostrar("inicio"); },
       guardar: (cx) => abrirMovimento({ tipo: "guardar", caixinha: cx }, "#reserva/guardar"),
       tirar: (cx) => abrirMovimento({ tipo: "tirar", caixinha: cx }, "#reserva/tirar"),
       passar: (cx) => abrirMovimento({ tipo: "passar", caixinha: cx }, "#reserva/passar"),
@@ -499,6 +443,13 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
       editar: (id) => abrirTelaLancar({ tipo: "editar", id: id }, "#editar/" + encodeURIComponent(id)),
     })
     : null;
+
+  const abrirAba = (id) => {
+    if (id === "contas" && telaContas) telaContas.abrir();
+    if (id === "reserva" && telaReserva) telaReserva.abrir();
+  };
+  aoMostrar.push(abrirAba);
+  abrirAba(atual); // aberto direto em #contas ou #reserva (a tela ainda não existia quando a aba foi mostrada)
 
   // ---- telas de ver: Início, Lançamentos e Resumo (js/tela-ver.js) ----
   if (typeof TelaVer !== "undefined") {
@@ -509,12 +460,13 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
       online: () => navigator.onLine !== false,
       agora: () => Date.now(),
       ir: (id) => ir(id),
+      ultimaChave: () => ultimaChave,
       novo: () => abrirTelaLancar({ tipo: "novo" }, "#novo"),
       // O nome do cartão vai só em memória (nunca na URL): o endereço continua "#novo".
       pagarFatura: (cartao) => abrirTelaLancar({ tipo: "novo", fatura: cartao }, "#novo"),
       editar: (id) => abrirTelaLancar({ tipo: "editar", id: id }, "#editar/" + encodeURIComponent(id)),
-      reserva: () => abrirReserva(),
-      contas: () => abrirContas(),
+      reserva: () => ir("reserva"),
+      contas: () => ir("contas"),
       conferir: (lugar) => abrirMovimento({ tipo: "conferir", lugar: lugar }, "#conferir"),
     });
     aoMostrar.push((id) => telaVer.mostrar(id));
@@ -524,29 +476,15 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   }
 
   // ---- gaveta (☰): só abre pelo botão (nenhum gesto de borda). Abrir empilha uma entrada; o Voltar fecha só a gaveta. ----
-  // Contas e Reserva ainda são subtelas do Início: vindo de outra tela, volta ao Início (história) e abre a subtela depois.
-  let depoisDeVoltar = null;
-  function irDaGaveta(id) {
-    if (id !== "contas" && id !== "reserva") { ir(id); return; }
-    if (subAtual() === id) return;
-    const abrir = id === "contas" ? abrirContas : abrirReserva;
-    if (atual !== "inicio") { depoisDeVoltar = abrir; history.back(); return; }
-    if (subAtual()) {
-      // de uma subtela para a outra: troca a entrada, sem empilhar
-      history.replaceState({ aba: "inicio", sub: id }, "", "#" + id);
-      if (reservaAberta) fecharReservaTela();
-      if (contasAberta) fecharContasTela();
-      if (id === "contas") abrirContasTela(); else abrirReservaTela();
-      return;
-    }
-    abrir();
-  }
+  // Mês, na gaveta, abre a última chave usada (como a fila de abas).
+  const irDaGaveta = (id) => ir(id === "lancamentos" ? Rotas.rotaDoMes(ultimaChave) : id);
   const gaveta = typeof Gaveta !== "undefined" && $("#gaveta")
     ? Gaveta.criar({
       doc: document,
       grupos: Rotas.GRUPOS,
       rotulo: Rotas.rotulo,
-      atual: () => subAtual() || atual,
+      itens: Rotas.itensDaGaveta,
+      atual: () => atual,
       ir: irDaGaveta,
       resto: appEl,
       historico: {
@@ -556,8 +494,52 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     })
     : null;
 
-  // Botão voltar do Android: fecha a gaveta, o formulário (perguntando se a pessoa mexeu) ou mostra a tela anterior, sem empilhar de novo.
+  // ---- botão "+" (js/mais.js): as opções mudam por tela; com duas ou mais abre a folha "O que você quer fazer?" ----
+  // Só entram as ações que existem (Nova conta a pagar, Nova conta fixa, Nova nota e Novo compromisso chegam com as outras telas).
+  let alturaMax = window.innerHeight;
+  function campoDeTexto() {
+    const a = document.activeElement;
+    if (!a) return false;
+    if (a.tagName === "TEXTAREA") return true;
+    return a.tagName === "INPUT" && !["button", "checkbox", "radio", "submit", "reset", "range", "file", "color", "image"].includes((a.type || "").toLowerCase());
+  }
+  function tecladoAberto() {
+    const vis = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    if (!campoDeTexto()) alturaMax = Math.max(alturaMax, window.innerHeight);
+    return Mais.tecladoAberto({ campoDeTexto: campoDeTexto(), alturaVisivel: vis, alturaTela: alturaMax });
+  }
+  mais = typeof Mais !== "undefined" && $("#mais")
+    ? Mais.criar({
+      doc: document,
+      atual: () => atual,
+      acoes: {
+        novo: () => abrirTelaLancar({ tipo: "novo" }, "#novo"),
+        ler: () => abrirLer(),
+      },
+      resto: appEl,
+      estado: () => ({ formAberto: algumFormAberto() || lerAberta, tecladoAberto: tecladoAberto(), gavetaAberta: !!gaveta && gaveta.aberta() }),
+      historico: {
+        empurrar: () => history.pushState({ folha: true }, "", location.hash || "#" + atual),
+        voltar: () => history.back(),
+      },
+    })
+    : null;
+  if (mais) {
+    const reavaliar = () => mais.atualizar();
+    aoMostrar.push(reavaliar);
+    ["focusin", "focusout"].forEach((n) => document.addEventListener(n, () => setTimeout(reavaliar, 0)));
+    window.addEventListener("resize", reavaliar);
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", reavaliar);
+    // Formulários, Ler comprovante e gaveta mostram/escondem a si mesmos: o botão acompanha.
+    if (typeof MutationObserver !== "undefined") {
+      const obs = new MutationObserver(reavaliar);
+      ["form", "mv", "ler", "gaveta"].forEach((id) => { const n = document.getElementById(id); if (n) obs.observe(n, { attributes: true, attributeFilter: ["hidden"] }); });
+    }
+  }
+
+  // Botão voltar do Android: fecha a folha do "+", a gaveta, o formulário (perguntando se a pessoa mexeu) ou mostra a tela anterior, sem empilhar de novo.
   window.addEventListener("popstate", () => {
+    if (mais && mais.aberta()) { mais.aoVoltar(); return; }
     if (gaveta && gaveta.aberta()) { gaveta.aoVoltar(); return; }
     const t = Rotas.telaDoHash(location.hash);
     if (t && t.tipo === "ler") {
@@ -565,7 +547,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
       if (algumFormAberto()) {
         const ativo = formAtivo();
         if (!saindoDeVez && ativo.mexeu()) {
-          history.pushState({ aba: atual, tela: true, sub: subAtual() }, "", "#novo");
+          history.pushState({ aba: atual, tela: true }, "", "#novo");
           ativo.pedirSaida();
           return;
         }
@@ -586,7 +568,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     const ativo = formAtivo();
     if (ativo) {
       if (!saindoDeVez && ativo.mexeu()) {
-        history.pushState({ aba: atual, tela: true, sub: subAtual() }, "", hashDaTela);
+        history.pushState({ aba: atual, tela: true }, "", hashDaTela);
         ativo.pedirSaida();
         return;
       }
@@ -595,7 +577,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     }
     if (lerAberta) {
       if (!saindoDeVez && telaLeitura.mexeu()) {
-        history.pushState({ aba: atual, tela: true, sub: subAtual() }, "", "#ler");
+        history.pushState({ aba: atual, tela: true }, "", "#ler");
         telaLeitura.pedirSaida();
         return;
       }
@@ -604,21 +586,10 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     saindoDeVez = false;
     const aba = Rotas.abaDoHash(location.hash);
     if (aba !== atual) mostrar(aba);
-    const sub = history.state && (history.state.sub === "reserva" || history.state.sub === "contas") ? history.state.sub : null;
-    if (sub === "reserva" && atual === "inicio") { if (contasAberta) fecharContasTela(); abrirReservaTela(); }
-    else if (sub === "contas" && atual === "inicio") { if (reservaAberta) fecharReservaTela(); abrirContasTela(); }
-    else {
-      if (reservaAberta) fecharReservaTela(true);
-      if (contasAberta) fecharContasTela(true);
-    }
-    if (depoisDeVoltar) { const f = depoisDeVoltar; depoisDeVoltar = null; f(); }
   });
   // Aberto direto por #novo, #editar/<id>, #reserva/... ou #conferir (por exemplo, ao recarregar): a aba fica por baixo.
   const telaInicial = Rotas.telaDoHash(hashInicial);
-  const subInicial = Rotas.subtelaDoHash(hashInicial);
-  if (subInicial === "reserva") abrirReserva();
-  else if (subInicial === "contas") abrirContas();
-  else if (telaInicial && telaInicial.tipo === "ler") abrirLer();
+  if (telaInicial && telaInicial.tipo === "ler") abrirLer();
   else if (telaInicial) abrirTelaLancar(telaInicial, hashInicial);
 
   // ---- Ajustes: ligação com a planilha e sobre o app ----
