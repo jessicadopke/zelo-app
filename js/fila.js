@@ -7,7 +7,7 @@ var Fila = (function () {
 
   var TAMANHO_LOTE = 50;
   // Contrato seção 4: só estes campos vão para a ponte.
-  var CAMPOS = ["id", "data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "origem", "apagado", "editado_em", "cartao", "caixinha"];
+  var CAMPOS = ["id", "data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "origem", "apagado", "editado_em", "cartao", "caixinha", "conta_id"];
   // Tipos aceitos (contrato seção 4; issues #37 e #39): os quatro últimos são movimentos, não gasto nem renda.
   var TIPOS = ["entrou", "saiu", "fatura", "guardou", "tirou", "saldo"];
   // Como o lançamento nasceu (contrato, seção 4). Ao editar a origem é mantida; origem que o app não conhece vira manual.
@@ -16,7 +16,10 @@ var Fila = (function () {
   var RE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
   var EDITAVEIS = ["data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "apagado", "cartao", "caixinha"];
   // Campos acrescentados depois do contrato 1: só vão para a ponte se tiverem valor (ou se o guardado tinha, para limpar).
-  var OPCIONAIS_NOVOS = ["cartao", "caixinha"];
+  // conta_id (#121): a conta a pagar que este lançamento paga; nunca editável (a edição mantém o que já tem).
+  var OPCIONAIS_NOVOS = ["cartao", "caixinha", "conta_id"];
+  // UUID v4 como o do script e o de Contas (variante livre), não o RE_ID mais estrito do id do lançamento.
+  var UUID_CONTA = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
   // Códigos em que vale tentar de novo mais tarde, sem a Jéssica fazer nada.
   var TENTAR_DEPOIS = ["sem_internet", "tempo_esgotado", "ocupado", "interno"];
@@ -100,6 +103,8 @@ var Fila = (function () {
     } else if (caixinha) {
       throw invalido("caixinha", "Este tipo não usa caixinha.");
     }
+    var contaId = r.conta_id === undefined || r.conta_id === null ? "" : r.conta_id;
+    if (contaId !== "" && !(typeof contaId === "string" && UUID_CONTA.test(contaId))) throw invalido("conta_id", "O número da conta está em formato errado.");
     var limpo = {
       id: r.id, data: r.data, tipo: r.tipo, valor_centavos: r.valor_centavos, favorecido: fav,
       categoria: textoOpcional(r.categoria, 40, "categoria"), pessoa: textoOpcional(r.pessoa, 40, "pessoa"),
@@ -108,6 +113,7 @@ var Fila = (function () {
     // Vazio some do registro da fila (script antigo não conhece estes campos); quem limpa um valor guardado repõe o "" (ver editar).
     if (cartao) limpo.cartao = cartao;
     if (caixinha) limpo.caixinha = caixinha;
+    if (contaId) limpo.conta_id = contaId;
     return limpo;
   }
 
@@ -160,7 +166,7 @@ var Fila = (function () {
       id = d.id !== undefined ? d.id : novoId();
       registro = conferir({
         id: id, data: d.data, tipo: d.tipo, valor_centavos: d.valor_centavos, favorecido: d.favorecido,
-        categoria: d.categoria, pessoa: d.pessoa, forma: d.forma, origem: d.origem, cartao: d.cartao, caixinha: d.caixinha, apagado: "", editado_em: Dat.agoraIso(agora),
+        categoria: d.categoria, pessoa: d.pessoa, forma: d.forma, origem: d.origem, cartao: d.cartao, caixinha: d.caixinha, conta_id: d.conta_id, apagado: "", editado_em: Dat.agoraIso(agora),
       });
     } catch (e) { return Promise.reject(e); }
     var local = Object.assign(paraLocal(registro), { situacao: "esperando" });
@@ -289,6 +295,8 @@ var Fila = (function () {
               if (r && !maisNova) {
                 var novo = soRegistro(r);
                 novo.id = entrada.id;
+                // Campo novo ausente na resposta do script: vale o do pedido ("ausente mantém").
+                OPCIONAIS_NOVOS.forEach(function (c) { if (r[c] === undefined) novo[c] = entrada.registro[c] === undefined ? "" : entrada.registro[c]; });
                 var diferente = CAMPOS.some(function (c) { return novo[c] !== (entrada.registro[c] === undefined ? "" : entrada.registro[c]); });
                 if (diferente) resumo.alterados_no_outro.push(entrada.id);
                 var trocado = Object.assign({}, novo, { situacao: "" });
@@ -390,6 +398,7 @@ var Fila = (function () {
     var apagado = it.apagado === undefined || it.apagado === null ? "" : it.apagado;
     if (apagado !== "" && apagado !== "sim") return null;
     var r = soRegistro(it);
+    if (typeof r.conta_id !== "string" || !UUID4.test(r.conta_id)) r.conta_id = "";
     r.apagado = apagado;
     r.atualizado_em = it.atualizado_em;
     r.situacao = "";

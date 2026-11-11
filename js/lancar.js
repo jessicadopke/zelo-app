@@ -6,6 +6,8 @@ var Lancar = (function () {
   var Lan = typeof Lancamentos !== "undefined" ? Lancamentos : require("./lancamentos.js");
   var For = typeof Formulario !== "undefined" ? Formulario : require("./formulario.js");
   var Opc = typeof Opcoes !== "undefined" ? Opcoes : require("./opcoes.js");
+  var Fil = typeof Fila !== "undefined" ? Fila : require("./fila.js");
+  var Din = typeof Dinheiro !== "undefined" ? Dinheiro : require("./dinheiro.js");
 
   var MENSAGEM_PADRAO = "Não consegui guardar no celular. O que você digitou continua aqui.";
 
@@ -38,14 +40,27 @@ var Lancar = (function () {
 
     // Abre o Novo: opções do celular, lançamentos para os padrões e as sugestões, e os campos iniciais.
     // pedido.fatura = nome do cartão (botão "Paguei a fatura" do Início): abre o pagamento com cartão e valor em aberto.
+    // pedido.conta = conta a pagar (#121): abre já preenchido e devolve pagamento { id, conta_id } (o id nasce ao abrir).
     function abrirNovo(hoje, pedido) {
-      return Promise.all([Opc.ler(db), Lan.todosVisiveis(db)]).then(function (v) {
+      var idConta = pedido && pedido.conta && typeof pedido.conta.id === "string" ? pedido.conta.id : "";
+      var lerConta = idConta && db.contas ? db.contas.obter(idConta) : Promise.resolve(null);
+      return Promise.all([Opc.ler(db), Lan.todosVisiveis(db), lerConta]).then(function (v) {
         var opcoesDaPlanilha = v[0], lancamentos = v[1];
         var ctx = { opcoes: opcoesDaPlanilha, hoje: hoje };
         var campos = For.vazio(ctx);
         var pad = For.padroes(lancamentos, ctx);
         campos.pessoa = pad.pessoa;
         campos.forma = pad.forma;
+        var conta = v[2];
+        if (conta && conta.situacao === "a_pagar") {
+          var lista = function (nome) { return opcoesDaPlanilha && Array.isArray(opcoesDaPlanilha[nome]) ? opcoesDaPlanilha[nome] : []; };
+          campos.tipo = "saiu";
+          campos.valor = Din.formatarCampo(conta.valor_centavos);
+          campos.favorecido = conta.favorecido;
+          campos.categoria = conta.categoria && lista("categorias").indexOf(conta.categoria) >= 0 ? conta.categoria : "";
+          campos.pessoa = conta.pessoa && lista("pessoas").indexOf(conta.pessoa) >= 0 ? conta.pessoa : "";
+          return { opcoes: opcoesDaPlanilha, lancamentos: lancamentos, campos: campos, conta: conta, pagamento: { id: Fil.novoId(), conta_id: conta.id } };
+        }
         var temCartao = !!(opcoesDaPlanilha && Array.isArray(opcoesDaPlanilha.cartoes) && opcoesDaPlanilha.cartoes.length);
         var cartaoPedido = pedido && typeof pedido.fatura === "string" ? pedido.fatura : "";
         if (temCartao && cartaoPedido && opcoesDaPlanilha.cartoes.indexOf(cartaoPedido) >= 0) {
@@ -77,12 +92,14 @@ var Lancar = (function () {
       });
     }
 
-    // origem: { id, origem } (opcional): a leitura de comprovante (#73) cria com o id gerado quando a proposta chegou e origem "foto".
+    // origem: { id, origem, conta_id } (opcional): a leitura de comprovante (#73) cria com o id gerado quando a proposta chegou e origem "foto";
+    // o pagamento de conta (#121) manda o id nascido ao abrir e o conta_id (sem origem = manual). Nunca vem do campo digitado.
     function salvarNovo(campos, ctx, origem) {
       var p = For.preparar(campos, ctx);
       var r = For.validar(p.campos, p.ctx);
       if (!r.ok) return Promise.resolve({ ok: false, erros: r.erros, avisos: r.avisos });
-      var registro = origem ? Object.assign({}, r.registro, { id: origem.id, origem: origem.origem }) : r.registro;
+      var registro = origem ? Object.assign({}, r.registro, { id: origem.id, origem: origem.origem || "manual" }) : r.registro;
+      if (origem && origem.conta_id) registro.conta_id = origem.conta_id;
       return umPorVez(function () {
         return Lan.criar(db, registro, relogio).then(function (l) { return { ok: true, lancamento: l, avisos: r.avisos }; });
       });

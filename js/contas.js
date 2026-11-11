@@ -10,6 +10,7 @@ var Contas = (function () {
   var OPCIONAIS = ["categoria", "pessoa", "lancamento_id", "recebido_em"];
   var SITUACOES = ["a_pagar", "paga"];
   var LIMITE_PAGAS = 20;
+  var SELO_PENDENTE = "Paga, falta enviar";
   var MAX_PAGINAS = 100;
   var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/;
   var ISO24 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -175,6 +176,21 @@ var Contas = (function () {
     return g;
   }
 
+  // Contas a pagar já pagas no app mas ainda não confirmadas pela planilha (#121, D1-A): derivado na hora, nada é gravado.
+  // Cada conta a_pagar com um lançamento não apagado que tenha conta_id = id vira cópia com situacao "paga";
+  // pendente = o lançamento ainda não foi enviado (situacao preenchida). As outras contas voltam como estão.
+  function comPagamentosLocais(contas, lancamentos) {
+    var mapa = {};
+    (lancamentos || []).forEach(function (l) {
+      if (!l || l.apagado === "sim" || typeof l.conta_id !== "string" || l.conta_id === "") return;
+      mapa[l.conta_id] = mapa[l.conta_id] === true || !!l.situacao;
+    });
+    return (contas || []).map(function (c) {
+      if (c.situacao !== "a_pagar" || !Object.prototype.hasOwnProperty.call(mapa, c.id)) return c;
+      return Object.assign({}, c, { situacao: "paga", pendente: mapa[c.id] });
+    });
+  }
+
   // As pagas que a tela mostra: as 20 mais recentes, ou todas.
   function pagasVisiveis(pagas, todas) {
     return todas ? pagas.slice() : pagas.slice(0, LIMITE_PAGAS);
@@ -199,6 +215,9 @@ var Contas = (function () {
       estado: vencida ? "vencida" : paga ? "paga" : "a_pagar",
       palavra: vencida ? "Vencida" : paga ? "Paga" : "A pagar",
       prazo: prazo,
+      pendente: c.pendente === true,
+      selo: c.pendente === true ? SELO_PENDENTE : "",
+      podePagar: !paga,
     };
   }
 
@@ -215,6 +234,47 @@ var Contas = (function () {
     if (r.pagas) return { marca: "", sub: "Tudo em dia." };
     if (r.lida) return { marca: "", sub: "Nenhuma conta ainda." };
     return { marca: "", sub: "Toque para buscar as contas." };
+  }
+
+  // ---- aviso de vencimento no Início (#122) ----
+  var DIAS_PADRAO = 3;
+  var DIAS_MAX = 30;
+  // Quantos dias antes avisar: inteiro de 0 a 30; qualquer outra coisa (ausente, texto, decimal, fora da faixa) vale o padrão.
+  function diasDeAviso(valor) {
+    return Number.isInteger(valor) && valor >= 0 && valor <= DIAS_MAX ? valor : DIAS_PADRAO;
+  }
+
+  // Contas que entram na faixa: a_pagar vencidas ou que vencem até hoje + dias. A lista deve vir de comPagamentosLocais.
+  function paraAvisar(lista, hoje, dias) {
+    var limite = Dat.somarDias(hoje, diasDeAviso(dias));
+    if (limite === null) return [];
+    return (lista || []).filter(function (c) { return c.situacao === "a_pagar" && c.vencimento <= limite; }).sort(porUrgencia);
+  }
+
+  function prazoDaFaixa(venc, hoje) {
+    var d = Dat.diasEntre(hoje, venc); // negativo = atraso
+    if (d < -1) return "venceu há " + (-d) + " dias";
+    if (d === -1) return "venceu ontem";
+    if (d === 0) return "vence hoje";
+    if (d === 1) return "vence amanhã";
+    return "vence em " + d + " dias";
+  }
+
+  // Textos da faixa: null (nenhuma conta) ou { tom, n, nome, prazo, titulo, sub, rotulo }.
+  // Uma conta: titulo "{Favorecido}: {prazo}" e sub = valor. Várias: "{N} contas para pagar logo" e "A primeira: {Favorecido}, {prazo}."
+  function textoDaFaixa(avisos, hoje) {
+    if (!avisos || !avisos.length) return null;
+    var p = avisos[0];
+    var prazo = prazoDaFaixa(p.vencimento, hoje);
+    var tom = avisos.some(function (c) { return c.vencimento < hoje; }) ? "alerta" : "aviso";
+    var valor = Din.formatar(p.valor_centavos);
+    if (avisos.length === 1) {
+      return { tom: tom, n: 1, nome: p.favorecido, prazo: prazo, titulo: p.favorecido + ": " + prazo, sub: valor,
+        rotulo: p.favorecido + ", " + prazo + ", " + valor + ". Abrir contas a pagar" };
+    }
+    var titulo = avisos.length + " contas para pagar logo";
+    var sub = "A primeira: " + p.favorecido + ", " + prazo + ".";
+    return { tom: tom, n: avisos.length, nome: p.favorecido, prazo: prazo, titulo: titulo, sub: sub, rotulo: titulo + ". " + sub + " Abrir contas a pagar" };
   }
 
   // ---- "Atualizado …" ----
@@ -271,7 +331,7 @@ var Contas = (function () {
 
   return {
     CAMPOS: CAMPOS, LIMITE_PAGAS: LIMITE_PAGAS, receber: receber, itemRecebido: itemRecebido, aoMudar: aoMudar,
-    agrupar: agrupar, pagasVisiveis: pagasVisiveis, formatarLinha: formatarLinha, resumo: resumo, textoEntrada: textoEntrada,
+    agrupar: agrupar, comPagamentosLocais: comPagamentosLocais, SELO_PENDENTE: SELO_PENDENTE, pagasVisiveis: pagasVisiveis, formatarLinha: formatarLinha, resumo: resumo, diasDeAviso: diasDeAviso, paraAvisar: paraAvisar, textoDaFaixa: textoDaFaixa, textoEntrada: textoEntrada,
     textoAtualizado: textoAtualizado, mensagemDeErro: mensagemDeErro, erroSemCopia: erroSemCopia, plural: plural,
   };
 })();

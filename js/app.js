@@ -1,6 +1,6 @@
 // Zelo: núcleo do app. Navegação por abas, tema e cópia offline. O conteúdo das telas vem nas próximas partes.
 // Depende de js/rotas.js (Rotas) e js/tema.js (Tema), carregados antes no index.html.
-const APP_VERSION = "0.13.0";
+const APP_VERSION = "0.14.0";
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -61,10 +61,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
       void tela.offsetWidth;
       tela.classList.add("entra-" + dir);
     }
-    $$(".nav a").forEach((a) => {
-      if (a.dataset.id === id) a.setAttribute("aria-current", "page");
-      else a.removeAttribute("aria-current");
-    });
+    pintarNavegacao();
     document.title = Rotas.titulo(id);
     const area = $("#conteudo");
     area.scrollTop = 0;
@@ -72,23 +69,52 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     aoMostrar.forEach((f) => f(id));
   }
 
+  // Barra de baixo e nome no topo: marcam o GRUPO da tela à vista (Contas e Reserva, que moram no Início, marcam Dinheiro).
+  function pintarNavegacao() {
+    const g = Rotas.grupoDaBarra(subAtual() || atual);
+    $$(".nav a").forEach((a) => {
+      if (a.dataset.id === g) a.setAttribute("aria-current", "page");
+      else a.removeAttribute("aria-current");
+    });
+    const grupo = Rotas.GRUPOS.filter((x) => x.id === g)[0];
+    const marca = $("#topo-marca"), nome = $("#topo-titulo");
+    marca.hidden = g !== "inicio";
+    nome.hidden = g === "inicio";
+    nome.textContent = grupo ? grupo.rotulo : "";
+  }
+
+  // A pilha do histórico é sempre Início -> tela atual (ver Rotas.comoNavegar): do Início empilha, entre telas de grupo troca,
+  // e "Início" dentro de um grupo volta uma entrada (cai no Início e a pilha fica zerada).
   function ir(id) {
     if (id === atual) {
       if (id === "inicio" && (reservaAberta || contasAberta)) history.back(); // "Início" tocado dentro da Reserva ou das Contas volta ao Início
       return;
     }
-    history.pushState({ aba: id }, "", "#" + id);
+    // Com Contas ou Reserva abertas a entrada de cima é a da subtela: ela é trocada, não empilhada.
+    const como = subAtual() && id !== "inicio" ? "trocar" : Rotas.comoNavegar(atual, id);
+    if (como === "voltar") { history.back(); return; }
+    if (como === "empurrar") history.pushState({ aba: id }, "", "#" + id);
+    else history.replaceState({ aba: id }, "", "#" + id);
     mostrar(id);
   }
 
   $$(".nav a").forEach((a) => a.addEventListener("click", (e) => {
     e.preventDefault();
-    ir(a.dataset.id);
+    const grupo = a.dataset.id;
+    if (grupo === Rotas.grupoDaBarra(subAtual() || atual)) return; // já está no grupo (inclusive Contas/Reserva dentro de Dinheiro)
+    ir(Rotas.primeiraTela(grupo));
   }));
-  // O botão voltar do Android (popstate) é tratado mais abaixo, junto com a tela de lançar.
+  // O botão voltar do Android (popstate) é tratado mais abaixo, junto com a gaveta e a tela de lançar.
   const hashInicial = location.hash;
   const inicial = Rotas.abaDoHash(location.hash);
-  history.replaceState({ aba: inicial }, "", "#" + inicial);
+  const abertoNumGrupo = inicial !== "inicio" && hashInicial === "#" + inicial;
+  if (abertoNumGrupo && !history.state) {
+    // Abertura direta (atalho, link): grava o Início por baixo, para o Voltar levar ao Início.
+    history.replaceState({ aba: "inicio" }, "", "#inicio");
+    history.pushState({ aba: inicial }, "", "#" + inicial);
+  } else if (!abertoNumGrupo || history.state.gaveta) {
+    history.replaceState({ aba: inicial }, "", "#" + inicial);
+  }
   mostrar(inicial);
   // Na abertura o foco fica no começo da página, não na área da tela (evita contorno à toa).
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
@@ -394,6 +420,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     principalEl.hidden = true;
     reservaEl.hidden = false;
     document.title = "Reserva · Zelo";
+    pintarNavegacao();
     telaReserva.abrir();
   }
   function fecharReservaTela(foco) {
@@ -402,6 +429,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     reservaEl.hidden = true;
     principalEl.hidden = false;
     document.title = Rotas.titulo(atual || "inicio");
+    pintarNavegacao();
     telaReserva.fechar();
     if (foco) {
       const alvo = $('[data-foco="reserva"]');
@@ -421,6 +449,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     principalEl.hidden = true;
     contasEl.hidden = false;
     document.title = "Contas a pagar · Zelo";
+    pintarNavegacao();
     telaContas.abrir();
   }
   function fecharContasTela(foco) {
@@ -429,9 +458,10 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     contasEl.hidden = true;
     principalEl.hidden = false;
     document.title = Rotas.titulo(atual || "inicio");
+    pintarNavegacao();
     telaContas.fechar();
     if (foco) {
-      const alvo = $('[data-foco="contas"]');
+      const alvo = $('[data-foco="faixa-venc"]') || $('[data-foco="contas"]'); // a faixa de aviso (#122), se existir
       if (alvo && alvo.focus) alvo.focus({ preventScroll: true });
     }
   }
@@ -447,6 +477,8 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
       online: () => navigator.onLine !== false,
       agora: () => Date.now(),
       sair: () => history.back(),
+      // A conta vai só em memória (nunca na URL): o endereço continua "#novo". Salvar ou descartar volta para esta lista.
+      pagar: (conta) => abrirTelaLancar({ tipo: "novo", conta: conta }, "#novo"),
     })
     : null;
 
@@ -491,8 +523,42 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     document.addEventListener("visibilitychange", () => { if (!document.hidden) telaVer.voltou(); });
   }
 
-  // Botão voltar do Android: fecha o formulário (perguntando se a pessoa mexeu) ou mostra a tela anterior, sem empilhar de novo.
+  // ---- gaveta (☰): só abre pelo botão (nenhum gesto de borda). Abrir empilha uma entrada; o Voltar fecha só a gaveta. ----
+  // Contas e Reserva ainda são subtelas do Início: vindo de outra tela, volta ao Início (história) e abre a subtela depois.
+  let depoisDeVoltar = null;
+  function irDaGaveta(id) {
+    if (id !== "contas" && id !== "reserva") { ir(id); return; }
+    if (subAtual() === id) return;
+    const abrir = id === "contas" ? abrirContas : abrirReserva;
+    if (atual !== "inicio") { depoisDeVoltar = abrir; history.back(); return; }
+    if (subAtual()) {
+      // de uma subtela para a outra: troca a entrada, sem empilhar
+      history.replaceState({ aba: "inicio", sub: id }, "", "#" + id);
+      if (reservaAberta) fecharReservaTela();
+      if (contasAberta) fecharContasTela();
+      if (id === "contas") abrirContasTela(); else abrirReservaTela();
+      return;
+    }
+    abrir();
+  }
+  const gaveta = typeof Gaveta !== "undefined" && $("#gaveta")
+    ? Gaveta.criar({
+      doc: document,
+      grupos: Rotas.GRUPOS,
+      rotulo: Rotas.rotulo,
+      atual: () => subAtual() || atual,
+      ir: irDaGaveta,
+      resto: appEl,
+      historico: {
+        empurrar: () => history.pushState({ gaveta: true }, "", location.hash || "#" + atual),
+        voltar: () => history.back(),
+      },
+    })
+    : null;
+
+  // Botão voltar do Android: fecha a gaveta, o formulário (perguntando se a pessoa mexeu) ou mostra a tela anterior, sem empilhar de novo.
   window.addEventListener("popstate", () => {
+    if (gaveta && gaveta.aberta()) { gaveta.aoVoltar(); return; }
     const t = Rotas.telaDoHash(location.hash);
     if (t && t.tipo === "ler") {
       // Voltou do Corrigir (o formulário fecha) ou abriu #ler direto.
@@ -545,6 +611,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
       if (reservaAberta) fecharReservaTela(true);
       if (contasAberta) fecharContasTela(true);
     }
+    if (depoisDeVoltar) { const f = depoisDeVoltar; depoisDeVoltar = null; f(); }
   });
   // Aberto direto por #novo, #editar/<id>, #reserva/... ou #conferir (por exemplo, ao recarregar): a aba fica por baixo.
   const telaInicial = Rotas.telaDoHash(hashInicial);

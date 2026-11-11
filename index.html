@@ -52,16 +52,26 @@ try {
   <symbol id="i-arquivo" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9.5 12h5M9.5 16h5"/></symbol>
   <symbol id="i-contas" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9.5 8h5M9.5 12h5"/></symbol>
   <symbol id="i-pontos" viewBox="0 0 24 24"><path d="M12 5h.01M12 12h.01M12 19h.01" stroke-width="3"/></symbol>
+  <symbol id="i-dinheiro" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5C14 8.5 13 8 12 8c-1.5 0-2.5.8-2.5 2s1 1.7 2.5 2 2.5.8 2.5 2-1 2-2.5 2c-1 0-2-.5-2.5-1.5M12 6.5V8M12 16v1.5"/></symbol>
+  <!-- Balão do ícone do app (decisão 16) com o coração dentro. -->
+  <symbol id="i-zelo" viewBox="0 0 24 24"><path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-5 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/><path stroke-width="1.5" d="M12 14l-2.9-2.8a1.9 1.9 0 0 1 2.9-2.5 1.9 1.9 0 0 1 2.9 2.5z"/></symbol>
+  <symbol id="i-agenda" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></symbol>
+  <symbol id="i-comp" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4M9.5 15l2 2 3.5-4"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
 </svg>
 
 <div class="app">
   <header class="topo">
-    <svg class="wordmark" viewBox="0 0 214 100" role="img" aria-label="Zelo">
-    <g fill="none" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" class="wordmark-traco">
-      <path d="M13 40 H52 L13 82 H52"/><path d="M72 61 H114 A21 21 0 1 0 105 77"/><path d="M140 14 V72 Q140 82 150 82"/><circle cx="190" cy="61" r="21"/>
-    </g>
-    <circle class="wordmark-ponto" cx="190" cy="61" r="6.5"/>
-  </svg>
+    <button class="btn-icone" id="menu-btn" type="button" aria-label="Abrir menu" aria-haspopup="dialog" aria-expanded="false"><svg class="ic" aria-hidden="true"><use href="#i-menu"/></svg></button>
+    <div class="topo-nome">
+      <svg class="wordmark" id="topo-marca" viewBox="0 0 214 100" role="img" aria-label="Zelo">
+        <g fill="none" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" class="wordmark-traco">
+          <path d="M13 40 H52 L13 82 H52"/><path d="M72 61 H114 A21 21 0 1 0 105 77"/><path d="M140 14 V72 Q140 82 150 82"/><circle cx="190" cy="61" r="21"/>
+        </g>
+        <circle class="wordmark-ponto" cx="190" cy="61" r="6.5"/>
+      </svg>
+      <span class="topo-titulo" id="topo-titulo" hidden></span>
+    </div>
     <!-- Indicador da fila de envio: carregando (esqueleto) até o banco responder; depois a pílula, que leva a Ajustes. -->
     <span class="fila-esq" id="fila-esq" aria-hidden="true"></span>
     <a class="fila-toque" id="fila-link" href="#ajustes" hidden><span class="fila" id="fila"></span></a>
@@ -206,17 +216,54 @@ try {
         </div>
       </section>
     </section>
+    <!-- Páginas "Em breve": o Zelo (conversa e notas) e a Agenda ainda não existem; aparecem pela barra e pela gaveta. -->
+    <section class="tela" data-tela="conversa" aria-labelledby="t-conv" hidden>
+      <h1 id="t-conv" tabindex="-1">Conversa</h1>
+      <div class="cartao embreve" role="status">
+        <svg class="ic ic-grande" aria-hidden="true"><use href="#i-zelo"/></svg>
+        <p><strong>Em breve</strong></p>
+        <p>A conversa com o Zelo ainda não existe. Quando chegar, você pergunta e anota por aqui.</p>
+      </div>
+    </section>
+    <section class="tela" data-tela="notas" aria-labelledby="t-notas" hidden>
+      <h1 id="t-notas" tabindex="-1">Notas</h1>
+      <div class="cartao embreve" role="status">
+        <svg class="ic ic-grande" aria-hidden="true"><use href="#i-arquivo"/></svg>
+        <p><strong>Em breve</strong></p>
+        <p>As notas do Zelo ainda não existem. Quando chegarem, ficam aqui.</p>
+      </div>
+    </section>
+    <section class="tela" data-tela="compromissos" aria-labelledby="t-comp" hidden>
+      <h1 id="t-comp" tabindex="-1">Compromissos</h1>
+      <div class="cartao embreve" role="status">
+        <svg class="ic ic-grande" aria-hidden="true"><use href="#i-comp"/></svg>
+        <p><strong>Em breve</strong></p>
+        <p>A Agenda ainda não existe. Quando chegar, os compromissos aparecem aqui.</p>
+      </div>
+    </section>
   </main>
   <!-- Aviso de baixo ("Guardado…", "Lançamento apagado. Desfazer"): por cima da área, sem empurrar nada. Vazio some. -->
   <div class="aviso-fixo" id="aviso" role="status"></div>
   </div>
 
   <nav class="nav" aria-label="Telas do Zelo">
-    <a href="#inicio" data-id="inicio" aria-current="page"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-casa"/></svg></span>Início</a>
-    <a href="#lancamentos" data-id="lancamentos"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-lista"/></svg></span>Lançamentos</a>
-    <a href="#resumo" data-id="resumo"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-resumo"/></svg></span>Resumo</a>
-    <a href="#ajustes" data-id="ajustes"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-ajustes"/></svg></span>Ajustes</a>
+    <a href="#inicio" data-id="inicio" aria-label="Início" aria-current="page"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-casa"/></svg></span></a>
+    <a href="#lancamentos" data-id="dinheiro" aria-label="Dinheiro"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-dinheiro"/></svg></span></a>
+    <a href="#conversa" data-id="zelo" class="zelo" aria-label="Zelo"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-zelo"/></svg></span></a>
+    <a href="#compromissos" data-id="agenda" aria-label="Agenda, em breve"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-agenda"/></svg></span></a>
+    <a href="#ajustes" data-id="sistema" aria-label="Sistema"><span class="pil"><svg class="ic" aria-hidden="true"><use href="#i-ajustes"/></svg></span></a>
   </nav>
+</div>
+<!-- Gaveta (☰): painel que entra da esquerda. Só abre pelo botão; a lista é desenhada por js/gaveta.js a partir de Rotas.GRUPOS. -->
+<div class="gaveta-fundo" id="gaveta" hidden>
+  <div class="veu" id="gaveta-veu"></div>
+  <aside class="gaveta" role="dialog" aria-modal="true" aria-label="Menu do Zelo">
+    <div class="gaveta-cab">
+      <span class="gaveta-nome" aria-hidden="true">Zelo</span>
+      <button class="btn-icone" id="gaveta-fechar" type="button" aria-label="Fechar menu"><svg class="ic" aria-hidden="true"><use href="#i-fechar"/></svg></button>
+    </div>
+    <ul class="gaveta-lista" id="gaveta-lista"></ul>
+  </aside>
 </div>
 <!-- Formulário de lançar (Novo e Editar): tela cheia por cima das abas, aberta por #novo e #editar/<id>. -->
 <section class="form" id="form" aria-labelledby="form-t" hidden>
@@ -243,15 +290,17 @@ try {
         <a class="btn-link" href="#ler" data-ler>Ler comprovante</a>
       </div>
       <div class="form-nota" id="lf-nota" role="status"></div>
+      <div class="form-conta" id="lf-conta" hidden><svg class="ic" aria-hidden="true"><use href="#i-contas"/></svg><p class="form-conta-tit" id="lf-conta-tit"></p><p class="form-conta-sub" id="lf-conta-sub"></p></div>
 
       <fieldset class="campo-grupo">
         <legend>Tipo</legend>
         <div class="escolhas dois" id="lf-tipos">
-          <label class="escolha"><svg class="ic ic-tipo saiu" aria-hidden="true"><use href="#i-saiu"/></svg><input type="radio" name="lf-tipo" value="saiu" checked>Saiu<svg class="ic ic-ok" aria-hidden="true"><use href="#i-ok"/></svg></label>
-          <label class="escolha"><svg class="ic ic-tipo entrou" aria-hidden="true"><use href="#i-entrou"/></svg><input type="radio" name="lf-tipo" value="entrou">Entrou<svg class="ic ic-ok" aria-hidden="true"><use href="#i-ok"/></svg></label>
+          <label class="escolha" id="lf-tipo-saiu"><svg class="ic ic-tipo saiu" aria-hidden="true"><use href="#i-saiu"/></svg><input type="radio" name="lf-tipo" value="saiu" checked>Saiu<svg class="ic ic-ok" aria-hidden="true"><use href="#i-ok"/></svg></label>
+          <label class="escolha" id="lf-tipo-entrou"><svg class="ic ic-tipo entrou" aria-hidden="true"><use href="#i-entrou"/></svg><input type="radio" name="lf-tipo" value="entrou">Entrou<svg class="ic ic-ok" aria-hidden="true"><use href="#i-ok"/></svg></label>
           <label class="escolha" id="lf-tipo-fatura" hidden><svg class="ic ic-tipo fatura" aria-hidden="true"><use href="#i-cartao"/></svg><input type="radio" name="lf-tipo" value="fatura">Fatura<svg class="ic ic-ok" aria-hidden="true"><use href="#i-ok"/></svg></label>
         </div>
         <p class="campo-apoio" id="lf-tipo-apoio" style="margin-top:var(--sp-2)" hidden>Pagamento da fatura do cartão. Não conta como gasto.</p>
+        <p class="campo-apoio" id="lf-tipo-conta" style="margin-top:var(--sp-2)" hidden>Pagar uma conta é sempre uma saída.</p>
       </fieldset>
 
       <fieldset class="campo-grupo" id="lf-qual-grupo" hidden>
@@ -264,6 +313,7 @@ try {
 
       <div class="campo">
         <label for="lf-valor" id="lf-valor-rotulo">Valor</label>
+        <p class="campo-apoio" id="lf-valor-apoio" hidden>Valor da conta. Se pagou outro valor, corrija.</p>
         <div class="campo-linha entrada-prefixo"><span class="prefixo" aria-hidden="true">R$</span><input id="lf-valor" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" enterkeyhint="next" aria-describedby="lf-valor-erro lf-valor-aviso"></div>
         <p class="campo-erro" id="lf-valor-erro" hidden><svg class="ic" aria-hidden="true"><use href="#i-atencao"/></svg><span></span></p>
         <p class="nota-ic nota-aviso" id="lf-valor-aviso" role="status"></p>
@@ -368,7 +418,7 @@ try {
 <div class="folha-fundo" id="lf-folha-fundo" hidden>
   <div class="folha" role="alertdialog" aria-modal="true" aria-labelledby="lf-folha-t">
     <h2 id="lf-folha-t" tabindex="-1">Descartar o que você digitou?</h2>
-    <p>Nada será guardado.</p>
+    <p id="lf-folha-apoio">Nada será guardado.</p>
     <div class="botoes">
       <button class="btn-p" id="lf-continuar" type="button">Continuar editando</button>
       <button class="btn-sec btn-atencao" id="lf-descartar-sim" type="button">Descartar</button>
@@ -402,6 +452,7 @@ try {
 <script src="js/tela-reserva.js"></script>
 <script src="js/tela-contas.js"></script>
 <script src="js/tela-ver.js"></script>
+<script src="js/gaveta.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

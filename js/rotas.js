@@ -1,31 +1,65 @@
-// Zelo: rotas das abas (lógica pura, testada com node --test). No navegador vira o objeto global Rotas.
+// Zelo: rotas das telas e dos grupos da barra (lógica pura, testada com node --test). No navegador vira o objeto global Rotas.
 var Rotas = (function () {
-  var ABAS = [
+  // Telas com <section data-tela> (a ordem é a da direção da animação). Contas e Reserva ainda são subtelas do Início
+  // (ver subtelaDoHash), mas têm rótulo próprio e pertencem ao grupo Dinheiro.
+  var TELAS = [
     { id: "inicio", rotulo: "Início" },
     { id: "lancamentos", rotulo: "Lançamentos" },
     { id: "resumo", rotulo: "Resumo" },
     { id: "ajustes", rotulo: "Ajustes" },
+    { id: "conversa", rotulo: "Conversa" },
+    { id: "notas", rotulo: "Notas" },
+    { id: "compromissos", rotulo: "Compromissos" },
+  ];
+  var SUBTELAS = [
+    { id: "contas", rotulo: "Contas a pagar" },
+    { id: "reserva", rotulo: "Reserva" },
+  ];
+  // Grupos da barra de baixo e da gaveta, na ordem em que aparecem.
+  var GRUPOS = [
+    { id: "inicio", rotulo: "Início", icone: "i-casa", telas: ["inicio"] },
+    { id: "dinheiro", rotulo: "Dinheiro", icone: "i-dinheiro", telas: ["lancamentos", "resumo", "contas", "reserva"] },
+    { id: "zelo", rotulo: "Zelo", icone: "i-zelo", telas: ["conversa", "notas"] },
+    { id: "agenda", rotulo: "Agenda", icone: "i-agenda", telas: ["compromissos"] },
+    { id: "sistema", rotulo: "Sistema", icone: "i-ajustes", telas: ["ajustes"] },
   ];
   var PADRAO = "inicio";
 
   // "#resumo" -> "resumo". Hash vazio ou inválido cai no Início.
   function abaDoHash(hash) {
     var id = String(hash || "").replace(/^#/, "");
-    return ABAS.some(function (a) { return a.id === id; }) ? id : PADRAO;
+    return TELAS.some(function (a) { return a.id === id; }) ? id : PADRAO;
   }
   function rotulo(id) {
-    var a = ABAS.filter(function (x) { return x.id === id; })[0];
+    var a = TELAS.concat(SUBTELAS).filter(function (x) { return x.id === id; })[0];
     return a ? a.rotulo : "";
   }
   function titulo(id) {
     return id === PADRAO ? "Zelo" : rotulo(id) + " · Zelo";
   }
-  // Direção da animação: "dir" se a nova aba está à direita da atual, "esq" se à esquerda, null se igual.
+  // Grupo da barra a que a rota pertence (inclusive Contas e Reserva). Desconhecida cai no Início.
+  function grupoDaBarra(id) {
+    var g = GRUPOS.filter(function (x) { return x.telas.indexOf(id) >= 0; })[0];
+    return g ? g.id : PADRAO;
+  }
+  // Primeira tela de cada grupo: a que a barra abre.
+  function primeiraTela(grupo) {
+    var g = GRUPOS.filter(function (x) { return x.id === grupo; })[0];
+    return g ? g.telas[0] : PADRAO;
+  }
+  // Direção da animação: "dir" se a nova tela está à direita da atual, "esq" se à esquerda, null se igual.
   function direcao(de, para) {
-    var i = ABAS.findIndex(function (a) { return a.id === de; });
-    var j = ABAS.findIndex(function (a) { return a.id === para; });
+    var i = TELAS.findIndex(function (a) { return a.id === de; });
+    var j = TELAS.findIndex(function (a) { return a.id === para; });
     if (i === j) return null;
     return j > i ? "dir" : "esq";
+  }
+  // O que fazer com o histórico ao ir de uma tela para outra. A pilha é sempre Início -> tela atual:
+  // "empurrar" (do Início para outra), "trocar" (de uma tela de grupo para outra), "voltar" (de uma tela de grupo para o Início), null (mesma).
+  function comoNavegar(de, para) {
+    if (de === para) return null;
+    if (de === PADRAO) return "empurrar";
+    return para === PADRAO ? "voltar" : "trocar";
   }
   // Telas de tela cheia, fora das abas: "#novo" -> { tipo: "novo" }; "#editar/<id>" -> { tipo: "editar", id };
   // "#reserva/guardar|tirar|passar" e "#conferir" -> { tipo: "guardar" | "tirar" | "passar" | "conferir" }; "#ler" -> { tipo: "ler" }
@@ -42,11 +76,14 @@ var Rotas = (function () {
     var m = /^editar\/([0-9A-Za-z-]{1,64})$/.exec(h);
     return m ? { tipo: "editar", id: m[1] } : null;
   }
-  // Tela dentro do Início (a barra de baixo continua marcando "Início"): "#reserva" -> "reserva", "#contas" -> "contas". O resto -> null.
+  // Tela dentro do Início por enquanto (a barra de baixo marca o grupo Dinheiro): "#reserva" -> "reserva", "#contas" -> "contas". O resto -> null.
   function subtelaDoHash(hash) {
     var h = String(hash || "").replace(/^#/, "");
     return h === "reserva" || h === "contas" ? h : null;
   }
-  return { subtelaDoHash: subtelaDoHash, ABAS: ABAS, PADRAO: PADRAO, abaDoHash: abaDoHash, telaDoHash: telaDoHash, rotulo: rotulo, titulo: titulo, direcao: direcao };
+  return {
+    subtelaDoHash: subtelaDoHash, TELAS: TELAS, GRUPOS: GRUPOS, PADRAO: PADRAO, abaDoHash: abaDoHash, telaDoHash: telaDoHash,
+    rotulo: rotulo, titulo: titulo, direcao: direcao, grupoDaBarra: grupoDaBarra, primeiraTela: primeiraTela, comoNavegar: comoNavegar,
+  };
 })();
 if (typeof module !== "undefined") module.exports = Rotas;

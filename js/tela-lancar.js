@@ -31,6 +31,7 @@ var TelaLancar = (function () {
     var original = null, inicial = null, opcoes = null, lancamentos = [];
     var lugar = null, qual = null, lugarPadrao = "", abriuPorFatura = false, listasVazias = false, ultimoAviso = "", ultimoAberto = "";
     var voltarFocoDaFolha = null, salvando = false, ultimaSugestao = "", tocou = {}, desligarFila = null, voltarFoco = null;
+    var pagamento = null; // Pagar uma conta (#121): { id, conta_id } nascido ao abrir; só em memória
     var previa = null; // Corrigir da leitura de comprovante (#73): { campos, id, origem, aoSalvar } ou null
     var outro = null; // nota "trocada por outro celular": { id, passo: "troca" | "visto" | "apagado" | "mantido", atual }
 
@@ -212,9 +213,17 @@ var TelaLancar = (function () {
       var t = tipoAtual(), fatura = t === "fatura", entrou = t === "entrou";
       var editar = modo === "editar";
       var daFatura = editar && !!original && original.tipo === "fatura";
-      var mostraFatura = temCartao() || daFatura || fatura;
+      var pagandoConta = !!pagamento;
+      var mostraFatura = !pagandoConta && (temCartao() || daFatura || fatura);
       $("lf-tipo-fatura").hidden = !mostraFatura;
-      $("lf-tipos").className = "escolhas " + (mostraFatura ? "tres" : "dois");
+      // Pagando uma conta o Tipo é só "Saiu", já marcado e sem escolha (#121).
+      $("lf-tipo-entrou").hidden = pagandoConta;
+      var fixo = $("lf-tipo-saiu");
+      if (pagandoConta) fixo.setAttribute("data-fixo", ""); else fixo.removeAttribute("data-fixo");
+      form.querySelectorAll('input[name="lf-tipo"]').forEach(function (r) { r.disabled = pagandoConta && r.value === "saiu"; });
+      $("lf-tipo-conta").hidden = !pagandoConta;
+      $("lf-valor-apoio").hidden = !pagandoConta;
+      $("lf-tipos").className = "escolhas " + (pagandoConta ? "dois" : mostraFatura ? "tres" : "dois");
       $("lf-tipo-apoio").hidden = !fatura;
       $("lf-qual-grupo").hidden = !fatura;
       ["lf-fav-campo", "lf-cat-grupo", "lf-pes-campo"].forEach(function (id) { $(id).hidden = fatura; });
@@ -227,7 +236,7 @@ var TelaLancar = (function () {
       $("lf-lugar-apoio").textContent = entrou ? "Escolha um cartão só se foi estorno ou crédito na fatura." : "Escolha um cartão se foi compra no crédito.";
       $("lf-listas-nota").hidden = fatura || !listasVazias;
       var tx = Formulario.textosDoTipo(t, editar);
-      titulo.textContent = tx.titulo;
+      titulo.textContent = pagandoConta ? "Pagar conta" : tx.titulo;
       $("lf-valor-rotulo").textContent = tx.valor;
       $("lf-data-rotulo").textContent = tx.data;
       var rotuloApagar = $("lf-apagar").querySelector("span");
@@ -530,7 +539,12 @@ var TelaLancar = (function () {
       lancamentos = dados.lancamentos;
       original = modo === "editar" ? dados.lancamento : null;
       lugarPadrao = modo === "novo" && dados.campos.tipo !== "fatura" && dados.campos.cartao ? dados.campos.cartao : "";
+      pagamento = modo === "novo" && dados.pagamento ? dados.pagamento : null;
+      pintarConta(dados);
       preencher(dados.campos);
+      if (pagamento && dados.conta.categoria && !dados.campos.categoria) {
+        notaCat.append(icone("i-info"), el("span", "", "A conta veio com a categoria \u201C" + dados.conta.categoria + "\u201D, que não está na lista. Escolha outra, se quiser."));
+      }
       if (modo === "editar") tocou.valor = true; // o valor guardado nunca é trocado sozinho
       inicial = lerCampos();
       if (modo === "editar") {
@@ -538,7 +552,7 @@ var TelaLancar = (function () {
         notaRecusado();
         Object.keys(dados.erros || {}).forEach(function (c) { mostrarErro(c, dados.erros[c]); });
         titulo.focus({ preventScroll: true });
-      } else if (abriuPorFatura && dados.campos.tipo === "fatura") {
+      } else if (pagamento || (abriuPorFatura && dados.campos.tipo === "fatura")) {
         // Aberto pelo "Paguei a fatura" do Início: cartão e valor já vêm certos, então o foco fica no título (teclado fechado).
         titulo.focus({ preventScroll: true });
       } else {
@@ -549,6 +563,17 @@ var TelaLancar = (function () {
       atualizarOpcoes();
     }
 
+    // Quadro "Pagando a conta de …" e o texto do Descartar (#121). Sem conta: tudo escondido e o texto de sempre.
+    function pintarConta(dados) {
+      var c = pagamento && dados ? dados.conta : null;
+      $("lf-conta").hidden = !c;
+      if (c) {
+        var Dat = typeof Datas !== "undefined" ? Datas : require("./datas.js");
+        $("lf-conta-tit").textContent = "Pagando a conta de " + c.favorecido;
+        $("lf-conta-sub").textContent = "Vencimento: " + Dat.porExtenso(c.vencimento);
+      }
+      $("lf-folha-apoio").textContent = c ? "Nada será guardado. A conta continua a pagar." : "Nada será guardado.";
+    }
     // Corrigir da leitura de comprovante: o que foi lido por cima dos padrões do Novo (campo vazio não apaga o padrão).
     function comPrevia(base, lido) {
       var saida = Object.assign({}, base);
@@ -560,7 +585,7 @@ var TelaLancar = (function () {
     // O convite "Tem o comprovante ou o extrato?" só aparece em Novo e enquanto nada foi digitado.
     function atualizarConvite() {
       var c = $("lf-convite");
-      if (c) c.hidden = !(aberto && modo === "novo" && !previa && !abriuPorFatura && !mexeu());
+      if (c) c.hidden = !(aberto && modo === "novo" && !previa && !abriuPorFatura && !pagamento && !mexeu());
     }
     function abrirTela(tela) {
       var minha = ++geracao;
@@ -568,8 +593,11 @@ var TelaLancar = (function () {
       modo = tela.tipo === "editar" ? "editar" : "novo";
       previa = modo === "novo" && tela.previa && typeof tela.previa === "object" ? tela.previa : null;
       abriuPorFatura = modo === "novo" && typeof tela.fatura === "string" && tela.fatura !== "";
+      var contaPedida = modo === "novo" && !previa && tela.conta && typeof tela.conta === "object" ? tela.conta : null;
+      pagamento = null;
+      pintarConta(null);
       if (!voltarFoco) voltarFoco = doc.activeElement;
-      titulo.textContent = modo === "editar" ? "Editar lançamento" : "Novo lançamento";
+      titulo.textContent = modo === "editar" ? "Editar lançamento" : contaPedida ? "Pagar conta" : "Novo lançamento";
       $("lf-folha-t").textContent = modo === "editar" ? "Descartar o que você mudou?" : "Descartar o que você digitou?";
       reiniciarEstado();
       original = null;
@@ -584,7 +612,7 @@ var TelaLancar = (function () {
       desligarFila = typeof Fila !== "undefined" && Fila.aoMudar ? Fila.aoMudar(aoMudarFila) : null;
       obterSessao().then(function (s) {
         if (!s) throw new Error("sem banco");
-        return modo === "editar" ? s.abrirEdicao(tela.id, env.hoje()) : s.abrirNovo(env.hoje(), abriuPorFatura ? { fatura: tela.fatura } : null);
+        return modo === "editar" ? s.abrirEdicao(tela.id, env.hoje()) : s.abrirNovo(env.hoje(), abriuPorFatura ? { fatura: tela.fatura } : contaPedida ? { conta: contaPedida } : null);
       }).then(function (dados) {
         if (minha !== geracao || !aberto) return;
         if (previa && dados && dados.campos) dados.campos = comPrevia(dados.campos, previa.campos);
@@ -623,6 +651,7 @@ var TelaLancar = (function () {
       if (!aberto) return;
       aberto = false;
       previa = null;
+      pagamento = null;
       geracao++;
       if (desligarFila) { desligarFila(); desligarFila = null; }
       form.hidden = true;
@@ -686,7 +715,7 @@ var TelaLancar = (function () {
       var campos = lerCampos();
       var p = modo === "editar" && original
         ? sessao.salvarEdicao(original, campos, contexto())
-        : sessao.salvarNovo(campos, contexto(), previa ? { id: previa.id, origem: previa.origem } : undefined);
+        : sessao.salvarNovo(campos, contexto(), previa ? { id: previa.id, origem: previa.origem } : pagamento ? { id: pagamento.id, conta_id: pagamento.conta_id } : undefined);
       p.then(aposSalvar).catch(function () { pintarSalvando(false); mostrarErroBanco("Não consegui guardar no celular."); });
     }
 

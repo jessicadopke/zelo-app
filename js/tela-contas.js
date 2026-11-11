@@ -4,10 +4,14 @@
 // No navegador vira o objeto global TelaContas.
 var TelaContas = (function () {
   var Con = typeof Contas !== "undefined" ? Contas : require("./contas.js");
+  var Fil = typeof Fila !== "undefined" ? Fila : require("./fila.js");
+
+  // Leitura rápida ao tocar em "Pagar" (#121, D2-A): no máximo isto, depois abre o formulário do mesmo jeito.
+  var ESPERA_CONFERIR_MS = 3000;
 
   var SVG_NS = "http://www.w3.org/2000/svg";
 
-  // env: { doc, pronto: Promise<{ db, ponte } | null>, hoje(), online(), agora() (ms), sair() }
+  // env: { doc, pronto: Promise<{ db, ponte } | null>, hoje(), online(), agora() (ms), sair(), pagar(conta) (abre o Novo já com a conta) }
   function criar(env) {
     var doc = env.doc || document;
     var $ = function (id) { return doc.getElementById(id); };
@@ -16,7 +20,10 @@ var TelaContas = (function () {
     var erro = null;             // { codigo, mensagem } da última leitura que não deu certo
     var atualizando = false, todasPagas = false;
     var contadorGrupos = 0;
-    var desligar = null;
+    var desligar = null, desligarFila = null;
+    var conferindo = "";         // id da conta que está sendo conferida antes de abrir o pagamento
+    var aviso = "";              // "ja_paga" | "guardado" | "": faixa no alto da lista
+    var pagando = false;         // abriu o pagamento daqui: o próximo "criou" da fila é este pagamento
 
     function el(tag, classe, texto) {
       var e = doc.createElement(tag);
@@ -44,9 +51,11 @@ var TelaContas = (function () {
     function ler() {
       var minha = ++geracao;
       if (!ctx || !ctx.db || !ctx.db.contas) return Promise.reject(new Error("sem banco"));
-      return Promise.all([ctx.db.contas.todas(), ctx.db.config.obter("ultima_leitura_contas")]).then(function (v) {
+      var lancs = ctx.db.lancamentos ? ctx.db.lancamentos.todos() : Promise.resolve([]);
+      return Promise.all([ctx.db.contas.todas(), ctx.db.config.obter("ultima_leitura_contas"), lancs]).then(function (v) {
         if (minha !== geracao) return dados;
-        dados = { lista: v[0] || [], ultima: typeof v[1] === "string" ? v[1] : null };
+        // A cópia local não muda: "paga, falta enviar" é derivado dos lançamentos com conta_id (D1-A).
+        dados = { lista: Con.comPagamentosLocais(v[0] || [], v[2] || []), ultima: typeof v[1] === "string" ? v[1] : null };
         return dados;
       });
     }
@@ -102,6 +111,7 @@ var TelaContas = (function () {
       var v = Con.formatarLinha(c, hoje);
       var li = el("li");
       var linha = el("div", "conta");
+      if (v.podePagar) linha.setAttribute("data-pagar", "");
       var txt = el("div", "conta-txt");
       txt.appendChild(el("p", "conta-fav", v.favorecido));
       txt.appendChild(el("p", "conta-sub", v.vencimento));
@@ -112,7 +122,23 @@ var TelaContas = (function () {
         pz.append(v.prazo.texto);
         txt.appendChild(pz);
       }
+      if (v.selo) {
+        var sl = el("p", "conta-selo");
+        var marca = el("span", "marca");
+        marca.setAttribute("data-tom", "esperando");
+        marca.append(ic("i-espera"), v.selo);
+        sl.appendChild(marca);
+        txt.appendChild(sl);
+      }
       linha.append(txt, dinDom(v));
+      if (v.podePagar) {
+        var bp = botao("conta-pagar", "", function () { pagar(c); });
+        bp.setAttribute("aria-label", "Pagar a conta de " + c.favorecido);
+        bp.setAttribute("data-foco", "pagar-" + c.id);
+        if (conferindo) { bp.disabled = true; if (conferindo === c.id) { bp.setAttribute("aria-busy", "true"); bp.appendChild(ic("i-enviando")); } }
+        bp.append("Pagar");
+        linha.appendChild(bp);
+      }
       li.appendChild(linha);
       return li;
     }
@@ -135,10 +161,18 @@ var TelaContas = (function () {
       return sec;
     }
 
+    function avisoDom() {
+      var f = el("div", "faixa faixa-info contas-aviso");
+      f.setAttribute("role", "status");
+      f.append(ic("i-ok"), el("div", "", aviso === "ja_paga" ? "Esta conta já foi paga." : "Pagamento guardado. A conta foi para Pagas."));
+      return f;
+    }
+
     function listaDom() {
       var hoje = env.hoje();
       var g = Con.agrupar(dados.lista, hoje);
       var raiz = el("div");
+      if (aviso) raiz.appendChild(avisoDom());
       if (g.vencidas.length) raiz.appendChild(grupoDom("vencidas", "Vencidas", "A mais antiga fica em cima.", g.vencidas, hoje, g.vencidas));
       if (g.aPagar.length) raiz.appendChild(grupoDom("pagar", "A pagar", "A que vence primeiro fica em cima.", g.aPagar, hoje, g.aPagar));
       if (!g.vencidas.length && !g.aPagar.length && g.pagas.length) {
@@ -197,6 +231,33 @@ var TelaContas = (function () {
       return null;
     }
 
+    // ---- pagar (#121): confere rápido se o outro celular já pagou (D2-A) e abre o Novo já preenchido ----
+    function pagar(conta) {
+      if (conferindo || !ctx || typeof env.pagar !== "function") return Promise.resolve();
+      aviso = "";
+      var abrirForm = function () { pagando = true; env.pagar(conta); };
+      if (!ctx.ponte || typeof ctx.ponte.chamar !== "function" || env.online() === false) { abrirForm(); return Promise.resolve(); }
+      conferindo = conta.id;
+      desenhar();
+      var fim;
+      var espera = new Promise(function (ok) { fim = setTimeout(ok, ESPERA_CONFERIR_MS); });
+      var leitura = Con.receber(ctx.db, ctx.ponte, { completo: true, relogio: function () { return new Date(env.agora()); } }).catch(function () { return null; });
+      return Promise.race([leitura, espera]).then(function () {
+        clearTimeout(fim);
+        return ctx.db.contas.obter(conta.id).catch(function () { return null; });
+      }).then(function (c) {
+        conferindo = "";
+        if (!aberta) return null;
+        if (c && c.situacao === "paga") {
+          aviso = "ja_paga";
+          return ler().catch(function () { return null; }).then(function () { desenhar(); });
+        }
+        desenhar();
+        abrirForm();
+        return null;
+      });
+    }
+
     // ---- ler da planilha (leitura completa: abrir a tela e o botão Atualizar) ----
     function sincronizar() {
       if (!aberta || !ctx || atualizando) return Promise.resolve();
@@ -229,6 +290,9 @@ var TelaContas = (function () {
     function abrir() {
       aberta = true;
       todasPagas = false;
+      aviso = "";
+      pagando = false;
+      conferindo = "";
       erro = null;
       atualizando = false;
       var h1 = $("ct-titulo");
@@ -257,6 +321,15 @@ var TelaContas = (function () {
         if (!aberta || atualizando) return;
         ler().then(function () { desenhar(); }).catch(function () {});
       });
+      // Lançamento criado, editado, apagado ou enviado: a derivação "paga, falta enviar" acompanha.
+      if (Fil.aoMudar) desligarFila = Fil.aoMudar(function (evento) {
+        if (!aberta || atualizando || ["criou", "editou", "terminou", "recebeu"].indexOf(evento) < 0) return;
+        if (evento === "criou" && pagando) { pagando = false; aviso = "guardado"; }
+        ler().then(function () {
+          desenhar();
+          if (aviso === "guardado") { var h1 = $("ct-titulo"); if (h1 && h1.focus) h1.focus({ preventScroll: true }); }
+        }).catch(function () {});
+      });
     }
     function fechar() { aberta = false; }
     function rede() {
@@ -269,7 +342,7 @@ var TelaContas = (function () {
         sincronizar();
       }
     }
-    function parar() { if (desligar) desligar(); desligar = null; aberta = false; }
+    function parar() { if (desligar) desligar(); desligar = null; if (desligarFila) desligarFila(); desligarFila = null; aberta = false; }
 
     var voltar = $("ct-voltar");
     if (voltar) voltar.addEventListener("click", function () { env.sair(); });

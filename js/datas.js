@@ -54,6 +54,13 @@ var Datas = (function () {
     return Math.round((ms(ate) - ms(de)) / 86400000);
   }
 
+  // Soma n dias (inteiro, pode ser negativo) a uma data AAAA-MM-DD, pelo calendário (sem horário de verão nem milissegundos soltos). Inválida -> null.
+  function somarDias(iso, n) {
+    if (!valida(iso) || !Number.isInteger(n)) return null;
+    var d = new Date(Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)) + n));
+    return pad(d.getUTCFullYear(), 4) + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate());
+  }
+
   // Data local do celular (não UTC).
   function hoje(agora) {
     var d = agora || new Date();
@@ -83,6 +90,6 @@ var Datas = (function () {
     return { de: ym + "-01", ate: ym + "-" + pad(diasNoMes(a, m)) };
   }
 
-  return { valida: valida, deTexto: deTexto, paraTela: paraTela, porExtenso: porExtenso, diasEntre: diasEntre, hoje: hoje, agoraIso: agoraIso, mes: mes, mesAnterior: mesAnterior, mesSeguinte: mesSeguinte, dosDoMes: dosDoMes };
+  return { valida: valida, deTexto: deTexto, paraTela: paraTela, porExtenso: porExtenso, diasEntre: diasEntre, somarDias: somarDias, hoje: hoje, agoraIso: agoraIso, mes: mes, mesAnterior: mesAnterior, mesSeguinte: mesSeguinte, dosDoMes: dosDoMes };
 })();
 if (typeof module !== "undefined") module.exports = Datas;

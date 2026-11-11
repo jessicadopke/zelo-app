@@ -5,12 +5,12 @@ var Db = (function () {
   var NOME = "zelo";
   var VERSAO = 2;
 
-  var CAMPOS_REGISTRO = ["id", "data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "origem", "apagado", "editado_em", "cartao", "caixinha"];
+  var CAMPOS_REGISTRO = ["id", "data", "tipo", "valor_centavos", "favorecido", "categoria", "pessoa", "forma", "origem", "apagado", "editado_em", "cartao", "caixinha", "conta_id"];
   var CAMPOS_LANCAMENTO = CAMPOS_REGISTRO.concat(["atualizado_em", "situacao", "motivo_recusa"]);
   var CAMPOS_FILA = ["seq", "id", "registro", "entrou_em"];
   // Contas a pagar (#120): só os 10 campos da seção 4A do contrato; a cópia local nunca guarda mais que isso.
   var CAMPOS_CONTA = ["id", "vencimento", "valor_centavos", "favorecido", "categoria", "pessoa", "situacao", "lancamento_id", "recebido_em", "atualizado_em"];
-  var CHAVES_CONFIG = ["proximo_desde", "url_ponte", "codigo_aparelho", "ultimo_envio_em", "ia_gasto_centavos", "ia_teto_centavos", "ia_mes", "proximo_desde_contas", "ultima_leitura_contas"];
+  var CHAVES_CONFIG = ["proximo_desde", "url_ponte", "codigo_aparelho", "ultimo_envio_em", "ia_gasto_centavos", "ia_teto_centavos", "ia_mes", "proximo_desde_contas", "ultima_leitura_contas", "dias_aviso"];
 
   var MENSAGENS = {
     sem_espaco: "Não consegui guardar no celular. Falta espaço.",

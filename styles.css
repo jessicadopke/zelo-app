@@ -218,14 +218,42 @@ button, a { min-height: 32px; min-width: 32px; }
 .opcao:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
 .apoio { color: var(--muted); font-size: var(--t-s); margin: var(--sp-2) 0 0; }
 
-/* barra de navegação inferior */
-.nav { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface); border-top: 1px solid var(--line); padding: var(--sp-2) var(--sp-1) calc(var(--sp-2) + env(safe-area-inset-bottom)); }
-.nav a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 56px; border-radius: var(--r-campo); font-size: var(--t-xs); font-weight: var(--w-forte); color: var(--muted); text-decoration: none; -webkit-tap-highlight-color: transparent; }
-.nav .pil { display: grid; place-items: center; width: 52px; height: 28px; border-radius: var(--r-pilula); transition: background var(--dur-curta) var(--ease-padrao); }
+/* barra de navegação inferior: 5 grupos, só ícones (o nome vem do aria-label) */
+.nav { display: grid; grid-template-columns: repeat(5, 1fr); background: var(--surface); border-top: 1px solid var(--line); padding: var(--sp-2) 0 calc(var(--sp-2) + env(safe-area-inset-bottom)); }
+.nav a { position: relative; display: flex; align-items: center; justify-content: center; min-height: 56px; min-width: 0; border-radius: var(--r-campo); color: var(--muted); text-decoration: none; -webkit-tap-highlight-color: transparent; }
+.nav .pil { display: grid; place-items: center; width: 56px; height: 32px; border-radius: var(--r-pilula); transition: background var(--dur-curta) var(--ease-padrao), color var(--dur-curta) var(--ease-padrao); }
 .nav a[aria-current="page"] { color: var(--accent); }
 .nav a[aria-current="page"] .pil { background: var(--accent-soft); }
+/* o ativo também ganha um traço embaixo: a marca não depende só de cor */
+.nav a[aria-current="page"]::after { content: ""; position: absolute; bottom: 2px; left: 50%; width: 16px; height: 4px; margin-left: -8px; border-radius: 2px; background: var(--accent); }
 .nav a:active .pil { background: var(--accent-soft); }
 .nav a:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+/* Zelo (centro): sempre com pílula de contorno; ativo, a pílula fica cheia */
+.nav .zelo { color: var(--accent); }
+.nav .zelo .pil { width: 60px; height: 36px; background: var(--accent-soft); border: 2px solid var(--accent); }
+.nav .zelo[aria-current="page"] .pil { background: var(--accent); color: var(--on-accent); }
+/* topo: ☰, nome (marca no Início, nome do grupo nas demais) e pílula da fila */
+.topo { padding-left: var(--sp-1); }
+.topo-nome { flex: 1; min-width: 0; display: flex; align-items: center; }
+.topo-titulo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-l); font-weight: var(--w-forte); color: var(--fg); }
+.btn-icone:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+/* gaveta (☰): painel de 280 px que entra da esquerda; no movimento reduzido só esmaece (--desloc-g vale 0) */
+.gaveta-fundo { position: fixed; inset: 0; z-index: 15; }
+.veu { position: absolute; inset: 0; background: color-mix(in srgb, var(--fg) 45%, transparent); animation: veu-entra var(--dur-media) var(--ease-entra); }
+@keyframes veu-entra { from { opacity: 0; } }
+.gaveta { position: absolute; top: 0; bottom: 0; left: 0; width: 280px; max-width: 88%; overflow-y: auto; overscroll-behavior: contain; background: var(--surface); box-shadow: var(--sh); padding: env(safe-area-inset-top) var(--sp-3) calc(var(--sp-4) + env(safe-area-inset-bottom)); animation: gaveta-entra var(--dur-media) var(--ease-entra); }
+@keyframes gaveta-entra { from { opacity: 0; transform: translateX(calc(var(--desloc-g) * -1)); } }
+.gaveta-cab { display: flex; align-items: center; justify-content: space-between; min-height: 56px; padding-left: var(--sp-2); }
+.gaveta-nome { font-size: var(--t-l); font-weight: var(--w-forte); color: var(--fg); }
+.gaveta-lista, .gaveta-itens { list-style: none; margin: 0; padding: 0; }
+.gaveta-titulo { margin: var(--sp-3) var(--sp-2) var(--sp-1); font-size: var(--t-s); font-weight: var(--w-forte); color: var(--muted); }
+.gaveta-item { display: flex; align-items: center; min-height: var(--toque); padding: 0 var(--sp-3); border-radius: var(--r-campo); color: var(--fg); font-size: var(--t-b); text-decoration: none; -webkit-tap-highlight-color: transparent; }
+.gaveta-item:active { background: var(--accent-soft); }
+.gaveta-item:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+/* item da tela atual: fundo, cor e barra ao lado (não depende só de cor) */
+.gaveta-item[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: var(--w-forte); box-shadow: inset 4px 0 0 var(--accent); }
+/* páginas "Em breve" */
+.embreve { margin-top: var(--sp-2); }
 [hidden] { display: none !important; }
 
 /* SEÇÃO "ENVIO DOS GASTOS" EM AJUSTES */
@@ -887,3 +915,41 @@ a.onde-linha > .onde-seta { align-self: center; width: 20px; height: 20px; color
 .conta .din-v { font-size: var(--t-l); line-height: 1.25; }
 .contas-mais { margin-top: var(--sp-3); }
 .contas-sec .res-nota { margin: var(--sp-2) 0 0; }
+
+/* ================= NOVO NO APP · pagar uma conta ================= */
+/* ---- Pagar conta · Lista de contas: botão "Pagar" (coluna do valor, embaixo) e selo "Paga, falta enviar" ---- */
+.conta-txt { grid-column: 1; }
+.conta > .din { grid-column: 2; grid-row: 1; }
+.conta[data-pagar] .conta-txt { grid-row: 1 / span 2; }
+.conta-pagar { grid-column: 2; grid-row: 2; justify-self: end; display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-1); min-width: 88px; min-height: 44px; margin-top: var(--sp-1); padding: 0 var(--sp-4); border: 1.5px solid var(--accent); border-radius: var(--r-botao); background: transparent; color: var(--accent); font: inherit; font-size: var(--t-b); font-weight: var(--w-forte); -webkit-tap-highlight-color: transparent; }
+.conta-pagar:active { transform: scale(var(--escala-aperta)); background: var(--accent-soft); }
+.conta-pagar:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.conta-pagar .ic { width: 20px; height: 20px; }
+.conta-pagar[aria-busy="true"] { background: var(--accent-soft); }
+.conta-pagar[aria-busy="true"] .ic { animation: gira 1.2s linear infinite; }
+:root[data-movimento="reduzido"] .conta-pagar[aria-busy="true"] .ic { animation: none; }
+@media (prefers-reduced-motion: reduce) { .conta-pagar[aria-busy="true"] .ic { animation: none; } }
+.conta-selo { margin: var(--sp-1) 0 0; }
+
+/* ---- Pagar conta · Formulário Novo lançamento aberto por uma conta ---- */
+.form-conta { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: var(--sp-1) var(--sp-3); margin: 0 0 var(--sp-4); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-campo); background: var(--accent-soft); color: var(--fg); }
+.form-conta > .ic { grid-row: 1 / span 2; width: 24px; height: 24px; margin-top: 1px; color: var(--accent); }
+.form-conta-tit { margin: 0; font-size: var(--t-b); font-weight: var(--w-forte); line-height: 1.3; overflow-wrap: anywhere; }
+.form-conta-sub { margin: 0; color: var(--muted); font-size: var(--t-s); line-height: 1.4; }
+.escolha[data-fixo] { cursor: default; }
+.escolha[data-fixo]:active { transform: none; }
+
+/* ---- Faixa de aviso de vencimento no Início (link para a lista de contas), acima do cartão "Contas a pagar" ---- */
+.faixa-venc { display: grid; grid-template-columns: 24px minmax(0, 1fr) 20px; gap: var(--sp-1) var(--sp-3); align-items: center; min-height: 56px; margin: 0 0 var(--sp-3); padding: var(--sp-3) var(--sp-4); border: 1.5px solid transparent; border-radius: var(--r-campo); background: var(--accent-soft); color: var(--fg); text-decoration: none; -webkit-tap-highlight-color: transparent; }
+.faixa-venc:active { background: var(--line); }
+.faixa-venc:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.faixa-venc-ic { width: 24px; height: 24px; color: var(--accent); }
+.faixa-venc-seta { width: 20px; height: 20px; color: var(--accent); }
+.faixa-venc-txt { min-width: 0; }
+.faixa-venc-tit { display: flex; min-width: 0; margin: 0; font-size: var(--t-b); font-weight: var(--w-forte); line-height: 1.3; }
+.faixa-venc-nome { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.faixa-venc-prazo { flex: none; white-space: nowrap; }
+.faixa-venc-sub { margin: 2px 0 0; font-size: var(--t-s); line-height: 1.4; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.faixa-venc[data-tom="alerta"] { background: var(--alerta-bg); border-color: var(--alerta); color: var(--alerta); }
+.faixa-venc[data-tom="alerta"]:active { background: var(--bg); }
+.faixa-venc[data-tom="alerta"] .faixa-venc-ic, .faixa-venc[data-tom="alerta"] .faixa-venc-seta { color: var(--alerta); }

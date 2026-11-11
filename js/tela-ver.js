@@ -178,8 +178,15 @@ var TelaVer = (function () {
     // Contas a pagar (#120): só a cópia local, para o cartão do Início. Sem a loja (arquivos de versões misturadas) ou com erro: sem cartão de números.
     function lerContas() {
       if (!ctx.db.contas) return Promise.resolve(null);
-      return Promise.all([ctx.db.contas.todas(), ctx.db.config.obter("ultima_leitura_contas")]).then(function (v) {
-        return Con.resumo(v[0] || [], env.hoje(), v[1]);
+      var lancs = ctx.db.lancamentos ? ctx.db.lancamentos.todos() : Promise.resolve([]);
+      return Promise.all([ctx.db.contas.todas(), ctx.db.config.obter("ultima_leitura_contas"), lancs, ctx.db.config.obter("dias_aviso").catch(function () { return null; })]).then(function (v) {
+        // Conta paga no app e ainda não confirmada pela planilha já conta como paga (#121).
+        var lista = Con.comPagamentosLocais(v[0] || [], v[2] || []);
+        var r = Con.resumo(lista, env.hoje(), v[1]);
+        // A faixa de vencimento (#122) usa esta mesma lista e os dias guardados; "hoje" é lido na hora de desenhar.
+        r.lista = lista;
+        r.diasAviso = Con.diasDeAviso(v[3]);
+        return r;
       }, function () { return null; });
     }
     function mesAtual() { if (mes === null) mes = Dat.mes(env.hoje()); return mes; }
@@ -579,6 +586,28 @@ var TelaVer = (function () {
       }
       return sec;
     }
+    // ---- faixa de aviso de vencimento (Início, #122): acima do cartão "Contas a pagar"; sem conta para avisar, não existe ----
+    function faixaVencimento(r) {
+      if (!r || !Array.isArray(r.lista)) return null;
+      var hoje = env.hoje();
+      var tx = Con.textoDaFaixa(Con.paraAvisar(r.lista, hoje, r.diasAviso), hoje);
+      if (!tx) return null;
+      var a = link("faixa-venc", "#contas", "", function () { if (env.contas) env.contas(); });
+      a.setAttribute("data-tom", tx.tom);
+      a.setAttribute("data-foco", "faixa-venc");
+      a.setAttribute("aria-label", tx.rotulo);
+      var corpo = el("div", "faixa-venc-txt");
+      if (tx.n === 1) {
+        var tit = el("p", "faixa-venc-tit");
+        tit.append(el("span", "faixa-venc-nome", tx.nome), el("span", "faixa-venc-prazo", ": " + tx.prazo));
+        corpo.appendChild(tit);
+      } else {
+        corpo.appendChild(el("p", "faixa-venc-tit", tx.titulo));
+      }
+      corpo.appendChild(el("p", "faixa-venc-sub", tx.sub));
+      a.append(ic(tx.tom === "alerta" ? "i-atencao" : "i-espera", "faixa-venc-ic"), corpo, ic("i-seta-dir", "faixa-venc-seta"));
+      return a;
+    }
     // ---- cartão "Contas a pagar" (Início, #120): sempre presente, abre a tela #contas ----
     function cartaoContas(r) {
       var tx = Con.textoEntrada(r || { vencidas: 0, aPagar: 0, pagas: 0, lida: false });
@@ -814,6 +843,8 @@ var TelaVer = (function () {
           raiz.appendChild(a);
         }
       }
+      var faixaV = faixaVencimento(d.contas);
+      if (faixaV) raiz.appendChild(faixaV);
       raiz.appendChild(cartaoContas(d.contas));
       var onde = blocoOnde(d);
       if (onde) raiz.appendChild(onde);

@@ -63,6 +63,19 @@ var Opcoes = (function () {
     return true;
   }
 
+  // Dias de aviso de vencimento (#122): campo ausente (script antigo) mantém; null apaga (volta ao padrão); inteiro de 0 a 30 grava se mudou;
+  // outro valor é ignorado. Falhar aqui não muda o resultado das listas.
+  function guardarDiasAviso(db, d) {
+    if (!("dias_aviso" in d) || !db.config) return Promise.resolve();
+    var v = d.dias_aviso;
+    var valido = v === null || (Number.isInteger(v) && v >= 0 && v <= 30);
+    if (!valido) return Promise.resolve();
+    return db.config.obter("dias_aviso").then(function (atual) {
+      if ((atual === undefined ? null : atual) === v) return null;
+      return db.config.definir("dias_aviso", v);
+    }).catch(function () { /* o aviso segue com o que já estava */ });
+  }
+
   function baixar(db, ponte) {
     return ponte.chamar("ler_categorias", {}).then(function (resp) {
       if (!resp || resp.ok !== true) {
@@ -89,6 +102,8 @@ var Opcoes = (function () {
       return ler(db).then(function (atual) {
         if (igual(atual, novo)) return { mudou: false, ignorados: ignorados };
         return db.categorias.gravar(novo).then(function () { return { mudou: true, ignorados: ignorados }; });
+      }).then(function (res) {
+        return guardarDiasAviso(db, d).then(function () { return res; });
       });
     });
   }
