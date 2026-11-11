@@ -240,7 +240,7 @@ var TelaReserva = (function () {
         return { no: bloco, quantidade: 0 };
       }
       var pag = Ver_.paginar(movs, ate, Ver_.TAMANHO);
-      var ref = { lista: movs, todos: d.todos, ate: pag.itens.length, wrap: el("div"), mais: el("div", "mais"), ul: null, data: null, n: 0 };
+      var ref = { lista: movs, todos: d.todos, ate: pag.itens.length, wrap: el("div"), mais: el("div", "ver-mais"), ul: null, data: null, n: 0 };
       ref.wrap.setAttribute("id", "rs-lista");
       anexar(ref, pag.itens);
       bloco.append(ref.wrap, ref.mais);

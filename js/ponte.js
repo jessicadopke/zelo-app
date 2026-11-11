@@ -10,6 +10,7 @@ var Ponte = (function () {
   var MENSAGENS = {
     sem_internet: "Sem internet. O app envia quando a conexão voltar.",
     tempo_esgotado: "A ponte demorou para responder. O app tenta de novo.",
+    ponte_inacessivel: "Não consegui falar com a ponte, mesmo com internet. Confira o endereço em Ajustes e tente de novo.",
     resposta_estranha: "A ponte respondeu algo inesperado. Confira o endereço em Ajustes.",
     sem_configuracao: "Falta configurar a ponte em Ajustes.",
     endereco_invalido: "O endereço da ponte precisa começar com https://. Confira em Ajustes.",
@@ -19,12 +20,17 @@ var Ponte = (function () {
     return { ok: false, local: true, erro: { codigo: codigo, mensagem: MENSAGENS[codigo] } };
   }
 
-  // opcoes: { lerConfig() -> Promise<{ url, codigo }>, fetch, versaoApp, tempoLimite, setTimeout, clearTimeout, AbortController }
+  // opcoes: { online() (padrão: navigator.onLine), lerConfig() -> Promise<{ url, codigo }>, fetch, versaoApp, tempoLimite, setTimeout, clearTimeout, AbortController }
   function criar(opcoes) {
     var op = opcoes || {};
     var lerConfig = op.lerConfig || function () { return Promise.resolve(null); };
     var versaoApp = typeof op.versaoApp === "string" ? op.versaoApp : "";
     var limite = typeof op.tempoLimite === "number" ? op.tempoLimite : TEMPO_LIMITE;
+
+    function semRede() {
+      if (typeof op.online === "function") return op.online() === false;
+      return typeof navigator !== "undefined" && navigator.onLine === false;
+    }
 
     // extra.tempoLimite (ms): só para esta chamada (a leitura de comprovante espera até 60 s; o resto, 30 s).
     function chamar(acao, dados, extra) {
@@ -66,7 +72,8 @@ var Ponte = (function () {
           if (!resp || resp.status !== 200) return local("resposta_estranha");
           texto = await resp.text();
         } catch (_) {
-          return local(estourou ? "tempo_esgotado" : "sem_internet");
+          // Só é "sem internet" quando o aparelho diz que está sem rede; com rede, o endereço ou a ponte é que não atendem.
+          return local(estourou ? "tempo_esgotado" : semRede() ? "sem_internet" : "ponte_inacessivel");
         }
         var env;
         try { env = JSON.parse(texto); } catch (_) { return local("resposta_estranha"); }

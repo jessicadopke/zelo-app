@@ -515,7 +515,7 @@ var TelaVer = (function () {
           raiz.appendChild(cartao(Ver_.vazio(contextoVazio(d, true)), limparFiltros));
         } else {
           var pag = Ver_.paginar(f, ate, Ver_.TAMANHO);
-          var ref = { lista: f, ate: pag.itens.length, wrap: el("div"), mais: el("div", "mais"), ul: null, data: null, n: 0 };
+          var ref = { lista: f, ate: pag.itens.length, wrap: el("div"), mais: el("div", "ver-mais"), ul: null, data: null, n: 0 };
           ref.wrap.setAttribute("id", "lista");
           anexar(ref, pag.itens);
           raiz.append(ref.wrap, ref.mais);

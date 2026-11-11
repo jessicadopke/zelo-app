@@ -302,7 +302,7 @@ var Contas = (function () {
   function tipoDeErro(erro) {
     var codigo = erro && typeof erro === "object" ? erro.codigo : erro;
     var mensagem = erro && typeof erro === "object" && typeof erro.mensagem === "string" ? erro.mensagem : "";
-    if (codigo === "sem_internet" || codigo === "tempo_esgotado") return "offline";
+    if (codigo === "sem_internet") return "offline";
     if (codigo === "sem_configuracao" || codigo === "endereco_invalido") return "ponte";
     if (codigo === "interno" && /aba Contas a pagar/.test(mensagem)) return "aba";
     return "outro";

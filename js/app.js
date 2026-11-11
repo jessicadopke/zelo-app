@@ -1,6 +1,6 @@
 // Zelo: núcleo do app. Navegação por abas, tema e cópia offline. O conteúdo das telas vem nas próximas partes.
 // Depende de js/rotas.js (Rotas) e js/tema.js (Tema), carregados antes no index.html.
-const APP_VERSION = "0.15.0";
+const APP_VERSION = "0.15.1";
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -68,7 +68,7 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
     aoMostrar.forEach((f) => f(id));
   }
 
-  // Barra de baixo, nome no topo, fila de abas e chave do Mês: tudo a partir da tela à vista.
+  // Barra de baixo, fila de abas e chave do Mês: tudo a partir da tela à vista.
   const chaveEl = $("#chave-mes");
   function pintarNavegacao() {
     const g = Rotas.grupoDaBarra(atual);
@@ -79,11 +79,6 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
       if (a.dataset.id === g) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
-    const grupo = Rotas.GRUPOS.filter((x) => x.id === g)[0];
-    const marca = $("#topo-marca"), nome = $("#topo-titulo");
-    marca.hidden = g !== "inicio";
-    nome.hidden = g === "inicio";
-    nome.textContent = grupo ? grupo.rotulo : "";
   }
 
   // A pilha do histórico é sempre Início -> tela atual (ver Rotas.comoNavegar): do Início empilha, entre telas de grupo troca,

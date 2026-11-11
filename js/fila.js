@@ -22,11 +22,12 @@ var Fila = (function () {
   var UUID_CONTA = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
   // Códigos em que vale tentar de novo mais tarde, sem a Jéssica fazer nada.
-  var TENTAR_DEPOIS = ["sem_internet", "tempo_esgotado", "ocupado", "interno"];
+  var TENTAR_DEPOIS = ["sem_internet", "ponte_inacessivel", "tempo_esgotado", "ocupado", "interno"];
 
   var MENSAGENS = {
     sem_internet: "Sem internet. O app envia quando a conexão voltar.",
     tempo_esgotado: "A ponte demorou para responder. O app tenta de novo.",
+    ponte_inacessivel: "Não consegui falar com a ponte, mesmo com internet. O app tenta de novo; se continuar, confira o endereço em Ajustes.",
     ocupado: "A planilha está ocupada agora. O app tenta de novo sozinho.",
     interno: "Algo deu errado na ponte. O app tenta de novo mais tarde.",
     codigo_invalido: "Este celular não foi reconhecido. Confira o código do aparelho em Ajustes.",

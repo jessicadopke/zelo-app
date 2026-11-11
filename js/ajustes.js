@@ -9,6 +9,7 @@ var Ajustes = (function () {
     codigo_vazio: "Digite o código deste celular.",
     sem_internet: "Sem internet. O app envia quando a conexão voltar.",
     tempo_esgotado: "A ponte demorou para responder. O app tenta de novo.",
+    ponte_inacessivel: "Não consegui falar com a ponte, mesmo com internet. Confira o endereço em Ajustes e tente de novo.",
     resposta_estranha: "A ponte respondeu algo inesperado. Confira o endereço em Ajustes.",
     endereco_invalido: "O endereço da ponte precisa começar com https://. Confira em Ajustes.",
     sem_configuracao: "Falta configurar a ponte em Ajustes.",
@@ -73,6 +74,7 @@ var Ajustes = (function () {
     switch (codigo) {
       case "sem_internet": return res("info", "i-semnet", TEXTOS.sem_internet, "Conecte e teste de novo.");
       case "tempo_esgotado": return res("info", "i-espera", TEXTOS.tempo_esgotado);
+      case "ponte_inacessivel": return res("erro", "i-atencao", TEXTOS.ponte_inacessivel);
       case "resposta_estranha": case "endereco_invalido": case "sem_configuracao":
         return res("erro", "i-atencao", TEXTOS[codigo]);
       case "codigo_invalido": case "versao_incompativel":

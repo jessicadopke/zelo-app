@@ -235,7 +235,6 @@ button, a { min-height: 32px; min-width: 32px; }
 /* topo: ☰, nome (marca no Início, nome do grupo nas demais) e pílula da fila */
 .topo { padding-left: var(--sp-1); }
 .topo-nome { flex: 1; min-width: 0; display: flex; align-items: center; }
-.topo-titulo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-l); font-weight: var(--w-forte); color: var(--fg); }
 .btn-icone:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
 /* gaveta (☰): painel de 280 px que entra da esquerda; no movimento reduzido só esmaece (--desloc-g vale 0) */
 .gaveta-fundo { position: fixed; inset: 0; z-index: 15; }
@@ -574,9 +573,9 @@ button, a { min-height: 32px; min-width: 32px; }
 .lan-motivo { margin: var(--sp-1) 0 0; font-size: var(--t-s); color: var(--alerta); line-height: 1.4; overflow-wrap: anywhere; }
 
 /* ---- "Mostrar mais" ---- */
-.mais { margin: var(--sp-2) 0 var(--sp-4); text-align: center; }
-.mais .apoio { margin: 0 0 var(--sp-2); }
-.mais .btn-sec { text-decoration: none; }
+.ver-mais { margin: var(--sp-2) 0 var(--sp-4); text-align: center; }
+.ver-mais .apoio { margin: 0 0 var(--sp-2); }
+.ver-mais .btn-sec { text-decoration: none; }
 
 /* ---- cartões de estado (vazio, buscando, nunca sincronizou) ---- */
 .cartao .btn-sec, .cartao .btn-p { margin-top: var(--sp-4); text-decoration: none; }
